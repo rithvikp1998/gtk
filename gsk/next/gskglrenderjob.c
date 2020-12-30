@@ -492,15 +492,28 @@ gsk_gl_render_job_draw_rect (GskGLRenderJob  *job,
 }
 
 static void
+gsk_gl_render_job_visit_color_node (GskGLRenderJob *job,
+                                    GskRenderNode  *node)
+{
+  GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
+
+  gsk_gl_program_begin_draw (job->driver->color,
+                             &job->viewport,
+                             &job->projection,
+                             &modelview->matrix,
+                             gsk_gl_render_job_get_clip (job));
+  gsk_gl_program_set_uniform_color (job->driver->color,
+                                    UNIFORM_COLOR_COLOR,
+                                    gsk_color_node_get_color (node));
+  gsk_gl_render_job_draw_rect (job, &node->bounds);
+  gsk_gl_program_end_draw (job->driver->color);
+}
+
+static void
 gsk_gl_render_job_visit_linear_gradient_node (GskGLRenderJob *job,
                                               GskRenderNode  *node)
 {
-  int n_color_stops;
-
-  g_assert (job != NULL);
-  g_assert (node != NULL);
-
-  n_color_stops = gsk_linear_gradient_node_get_n_color_stops (node);
+  int n_color_stops = gsk_linear_gradient_node_get_n_color_stops (node);
 
   if (n_color_stops < MAX_GRADIENT_STOPS)
     {
@@ -540,8 +553,6 @@ static void
 gsk_gl_render_job_visit_node (GskGLRenderJob *job,
                               GskRenderNode  *node)
 {
-  GskGLRenderModelview *modelview;
-
   g_assert (job != NULL);
   g_assert (node != NULL);
   g_assert (GSK_IS_NEXT_DRIVER (job->driver));
@@ -550,8 +561,6 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
   if (node_is_invisible (node) ||
       !gsk_gl_render_job_node_overlaps_clip (job, node))
     return;
-
-  modelview = gsk_gl_render_job_get_modelview (job);
 
   switch (gsk_render_node_get_node_type (node))
     {
@@ -585,18 +594,7 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
     break;
 
     case GSK_COLOR_NODE:
-      {
-        gsk_gl_program_begin_draw (job->driver->color,
-                                   &job->viewport,
-                                   &job->projection,
-                                   &modelview->matrix,
-                                   gsk_gl_render_job_get_clip (job));
-        gsk_gl_program_set_uniform_color (job->driver->color,
-                                          UNIFORM_COLOR_COLOR,
-                                          gsk_color_node_get_color (node));
-        gsk_gl_render_job_draw_rect (job, &node->bounds);
-        gsk_gl_program_end_draw (job->driver->color);
-      }
+      gsk_gl_render_job_visit_color_node (job, node);
     break;
 
     case GSK_LINEAR_GRADIENT_NODE:
