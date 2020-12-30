@@ -492,6 +492,12 @@ gsk_gl_render_job_draw_rect (GskGLRenderJob  *job,
 }
 
 static void
+gsk_gl_render_job_visit_as_fallback (GskGLRenderJob *job,
+                                     GskRenderNode  *node)
+{
+}
+
+static void
 gsk_gl_render_job_visit_color_node (GskGLRenderJob *job,
                                     GskRenderNode  *node)
 {
@@ -545,7 +551,7 @@ gsk_gl_render_job_visit_linear_gradient_node (GskGLRenderJob *job,
     }
   else
     {
-      //render_fallback_node (job, node);
+      gsk_gl_render_job_visit_as_fallback (job, node);
     }
 }
 
