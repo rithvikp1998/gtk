@@ -70,6 +70,9 @@ typedef struct _GskGLRenderModelview
   graphene_matrix_t matrix;
 } GskGLRenderModelview;
 
+static void gsk_gl_render_job_visit_node (GskGLRenderJob *job,
+                                          GskRenderNode  *node);
+
 static void
 init_projection_matrix (graphene_matrix_t     *projection,
                         const graphene_rect_t *viewport,
@@ -586,6 +589,51 @@ gsk_gl_render_job_visit_linear_gradient_node (GskGLRenderJob *job,
 }
 
 static void
+gsk_gl_render_job_visit_transform_node (GskGLRenderJob *job,
+                                        GskRenderNode  *node)
+{
+  GskTransform *transform = gsk_transform_node_get_transform (node);
+  const GskTransformCategory category = gsk_transform_get_category (transform);
+  GskRenderNode *child = gsk_transform_node_get_child (node);
+
+  switch (category)
+    {
+    case GSK_TRANSFORM_CATEGORY_IDENTITY:
+      gsk_gl_render_job_visit_node (job, child);
+    break;
+
+    case GSK_TRANSFORM_CATEGORY_2D_TRANSLATE:
+      {
+        float dx, dy;
+
+        gsk_transform_to_translate (transform, &dx, &dy);
+        gsk_gl_render_job_offset (job, dx, dy);
+        gsk_gl_render_job_visit_node (job, child);
+        gsk_gl_render_job_offset (job, -dx, -dy);
+      }
+    break;
+
+    case GSK_TRANSFORM_CATEGORY_2D_AFFINE:
+      {
+        gsk_gl_render_job_push_modelview (job, transform);
+        gsk_gl_render_job_visit_node (job, child);
+        gsk_gl_render_job_pop_modelview (job);
+      }
+    break;
+
+    case GSK_TRANSFORM_CATEGORY_2D:
+    case GSK_TRANSFORM_CATEGORY_3D:
+    case GSK_TRANSFORM_CATEGORY_ANY:
+    case GSK_TRANSFORM_CATEGORY_UNKNOWN:
+      g_warning ("TODO: complex transform\n");
+    break;
+
+    default:
+      g_assert_not_reached ();
+    }
+}
+
+static void
 gsk_gl_render_job_visit_node (GskGLRenderJob *job,
                               GskRenderNode  *node)
 {
@@ -637,6 +685,10 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
       gsk_gl_render_job_visit_linear_gradient_node (job, node);
     break;
 
+    case GSK_TRANSFORM_NODE:
+      gsk_gl_render_job_visit_transform_node (job, node);
+    break;
+
     case GSK_BLEND_NODE:
     case GSK_BLUR_NODE:
     case GSK_BORDER_NODE:
@@ -657,7 +709,6 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
     case GSK_SHADOW_NODE:
     case GSK_TEXTURE_NODE:
     case GSK_TEXT_NODE:
-    case GSK_TRANSFORM_NODE:
     break;
 
     case GSK_NOT_A_RENDER_NODE:
