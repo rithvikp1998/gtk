@@ -44,21 +44,19 @@ struct _GskGLProgram
   int                clip_rect_location;
 };
 
-GskGLProgram    *gsk_gl_program_new                      (GskGLCommandQueue       *command_queue,
-                                                          const char              *name,
-                                                          int                      program_id);
-int              gsk_gl_program_get_id                   (GskGLProgram            *self);
-const char      *gsk_gl_program_get_name                 (GskGLProgram            *self);
-gboolean         gsk_gl_program_add_uniform              (GskGLProgram            *self,
-                                                          const char              *name,
-                                                          guint                    key);
-void             gsk_gl_program_delete                   (GskGLProgram            *self);
-void             gsk_gl_program_begin_draw               (GskGLProgram            *self,
-                                                          const graphene_rect_t   *viewport,
-                                                          const graphene_matrix_t *projection,
-                                                          const graphene_matrix_t *modelview,
-                                                          const GskRoundedRect    *clip);
-void             gsk_gl_program_end_draw                 (GskGLProgram            *self);
+GskGLProgram *gsk_gl_program_new         (GskGLCommandQueue       *command_queue,
+                                          const char              *name,
+                                          int                      program_id);
+gboolean      gsk_gl_program_add_uniform (GskGLProgram            *self,
+                                          const char              *name,
+                                          guint                    key);
+void          gsk_gl_program_delete      (GskGLProgram            *self);
+void          gsk_gl_program_begin_draw  (GskGLProgram            *self,
+                                          const graphene_rect_t   *viewport,
+                                          const graphene_matrix_t *projection,
+                                          const graphene_matrix_t *modelview,
+                                          const GskRoundedRect    *clip);
+void          gsk_gl_program_end_draw    (GskGLProgram            *self);
 
 static inline int
 gsk_gl_program_get_uniform_location (GskGLProgram *self,
