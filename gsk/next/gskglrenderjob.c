@@ -657,26 +657,26 @@ gsk_gl_render_job_visit_linear_gradient_node (GskGLRenderJob *job,
       const graphene_point_t *start = gsk_linear_gradient_node_get_start (node);
       const graphene_point_t *end = gsk_linear_gradient_node_get_end (node);
 
-      gsk_gl_program_begin_draw (job->driver->color,
+      gsk_gl_program_begin_draw (job->driver->linear_gradient,
                                  &job->viewport,
                                  &job->projection,
                                  &modelview->matrix,
                                  gsk_gl_render_job_get_clip (job));
-      gsk_gl_program_set_uniform1i (job->driver->color,
+      gsk_gl_program_set_uniform1i (job->driver->linear_gradient,
                                     UNIFORM_LINEAR_GRADIENT_NUM_COLOR_STOPS,
                                     n_color_stops);
-      gsk_gl_program_set_uniform1fv (job->driver->color,
+      gsk_gl_program_set_uniform1fv (job->driver->linear_gradient,
                                      UNIFORM_LINEAR_GRADIENT_COLOR_STOPS,
                                      n_color_stops * 5,
                                      (const float *)stops);
-      gsk_gl_program_set_uniform2f (job->driver->color,
+      gsk_gl_program_set_uniform2f (job->driver->linear_gradient,
                                     UNIFORM_LINEAR_GRADIENT_START_POINT,
                                     start->x, start->y);
-      gsk_gl_program_set_uniform2f (job->driver->color,
+      gsk_gl_program_set_uniform2f (job->driver->linear_gradient,
                                     UNIFORM_LINEAR_GRADIENT_END_POINT,
                                     end->x, end->y);
       gsk_gl_render_job_draw_rect (job, &node->bounds);
-      gsk_gl_program_end_draw (job->driver->color);
+      gsk_gl_program_end_draw (job->driver->linear_gradient);
     }
   else
     {
