@@ -35,6 +35,7 @@
 
 #define ORTHO_NEAR_PLANE -10000
 #define ORTHO_FAR_PLANE   10000
+#define MAX_GRADIENT_STOPS  6
 
 struct _GskGLRenderJob
 {
@@ -491,6 +492,51 @@ gsk_gl_render_job_draw_rect (GskGLRenderJob  *job,
 }
 
 static void
+gsk_gl_render_job_visit_linear_gradient_node (GskGLRenderJob *job,
+                                              GskRenderNode  *node)
+{
+  int n_color_stops;
+
+  g_assert (job != NULL);
+  g_assert (node != NULL);
+
+  n_color_stops = gsk_linear_gradient_node_get_n_color_stops (node);
+
+  if (n_color_stops < MAX_GRADIENT_STOPS)
+    {
+      GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
+      const GskColorStop *stops = gsk_linear_gradient_node_get_color_stops (node, NULL);
+      const graphene_point_t *start = gsk_linear_gradient_node_get_start (node);
+      const graphene_point_t *end = gsk_linear_gradient_node_get_end (node);
+
+      gsk_gl_program_begin_draw (job->driver->color,
+                                 &job->viewport,
+                                 &job->projection,
+                                 &modelview->matrix,
+                                 gsk_gl_render_job_get_clip (job));
+      gsk_gl_program_set_uniform1i (job->driver->color,
+                                    UNIFORM_LINEAR_GRADIENT_NUM_COLOR_STOPS,
+                                    n_color_stops);
+      gsk_gl_program_set_uniform1fv (job->driver->color,
+                                     UNIFORM_LINEAR_GRADIENT_COLOR_STOPS,
+                                     n_color_stops * 5,
+                                     (const float *)stops);
+      gsk_gl_program_set_uniform2f (job->driver->color,
+                                    UNIFORM_LINEAR_GRADIENT_START_POINT,
+                                    start->x, start->y);
+      gsk_gl_program_set_uniform2f (job->driver->color,
+                                    UNIFORM_LINEAR_GRADIENT_END_POINT,
+                                    end->x, end->y);
+      gsk_gl_render_job_draw_rect (job, &node->bounds);
+      gsk_gl_program_end_draw (job->driver->color);
+    }
+  else
+    {
+      //render_fallback_node (job, node);
+    }
+}
+
+static void
 gsk_gl_render_job_visit_node (GskGLRenderJob *job,
                               GskRenderNode  *node)
 {
@@ -553,6 +599,10 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
       }
     break;
 
+    case GSK_LINEAR_GRADIENT_NODE:
+      gsk_gl_render_job_visit_linear_gradient_node (job, node);
+    break;
+
     case GSK_BLEND_NODE:
     case GSK_BLUR_NODE:
     case GSK_BORDER_NODE:
@@ -563,7 +613,6 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
     case GSK_CROSS_FADE_NODE:
     case GSK_GL_SHADER_NODE:
     case GSK_INSET_SHADOW_NODE:
-    case GSK_LINEAR_GRADIENT_NODE:
     case GSK_OPACITY_NODE:
     case GSK_OUTSET_SHADOW_NODE:
     case GSK_RADIAL_GRADIENT_NODE:
