@@ -37,6 +37,29 @@
 #define ORTHO_FAR_PLANE     10000
 #define MAX_GRADIENT_STOPS  6
 
+
+#define rounded_rect_top_left(r)                                                        \
+  (GRAPHENE_RECT_INIT(r->bounds.origin.x,                                               \
+                      r->bounds.origin.y,                                               \
+                      r->corner[0].width, r->corner[0].height))
+#define rounded_rect_top_right(r) \
+  (GRAPHENE_RECT_INIT(r->bounds.origin.x + r->bounds.size.width - r->corner[1].width,   \
+                      r->bounds.origin.y, \
+                      r->corner[1].width, r->corner[1].height))
+#define rounded_rect_bottom_right(r) \
+  (GRAPHENE_RECT_INIT(r->bounds.origin.x + r->bounds.size.width - r->corner[2].width,   \
+                      r->bounds.origin.y + r->bounds.size.height - r->corner[2].height, \
+                      r->corner[2].width, r->corner[2].height))
+#define rounded_rect_bottom_left(r)                                                     \
+  (GRAPHENE_RECT_INIT(r->bounds.origin.x,                                               \
+                      r->bounds.origin.y + r->bounds.size.height - r->corner[2].height, \
+                      r->corner[3].width, r->corner[3].height))
+#define rounded_rect_corner0(r)   rounded_rect_top_left(r)
+#define rounded_rect_corner1(r)   rounded_rect_top_right(r)
+#define rounded_rect_corner2(r)   rounded_rect_bottom_right(r)
+#define rounded_rect_corner3(r)   rounded_rect_bottom_left(r)
+#define rounded_rect_corner(r, i) (rounded_rect_corner##i(r))
+
 struct _GskGLRenderJob
 {
   GskNextDriver     *driver;
@@ -72,6 +95,130 @@ typedef struct _GskGLRenderModelview
 
 static void gsk_gl_render_job_visit_node (GskGLRenderJob *job,
                                           GskRenderNode  *node);
+
+static inline gboolean G_GNUC_PURE
+node_is_invisible (const GskRenderNode *node)
+{
+  return node->bounds.size.width == 0.0f ||
+         node->bounds.size.height == 0.0f ||
+         isnan (node->bounds.size.width) ||
+         isnan (node->bounds.size.height);
+}
+
+static inline gboolean G_GNUC_PURE
+node_supports_transform (GskRenderNode *node)
+{
+  /* Some nodes can't handle non-trivial transforms without being
+   * rendered to a texture (e.g. rotated clips, etc.). Some however work
+   * just fine, mostly because they already draw their child to a
+   * texture and just render the texture manipulated in some way, think
+   * opacity or color matrix.
+   */
+
+  switch ((int)gsk_render_node_get_node_type (node))
+    {
+      case GSK_COLOR_NODE:
+      case GSK_OPACITY_NODE:
+      case GSK_COLOR_MATRIX_NODE:
+      case GSK_TEXTURE_NODE:
+      case GSK_CROSS_FADE_NODE:
+      case GSK_LINEAR_GRADIENT_NODE:
+      case GSK_DEBUG_NODE:
+      case GSK_TEXT_NODE:
+        return TRUE;
+
+      case GSK_TRANSFORM_NODE:
+        return node_supports_transform (gsk_transform_node_get_child (node));
+
+      default:
+        return FALSE;
+    }
+}
+
+static inline gboolean G_GNUC_PURE
+rect_intersects (const graphene_rect_t *r1,
+                 const graphene_rect_t *r2)
+{
+  /* Assume both rects are already normalized, as they usually are */
+  if (r1->origin.x > (r2->origin.x + r2->size.width) ||
+      (r1->origin.x + r1->size.width) < r2->origin.x)
+    return FALSE;
+  else if (r1->origin.y > (r2->origin.y + r2->size.height) ||
+      (r1->origin.y + r1->size.height) < r2->origin.y)
+    return FALSE;
+  else
+    return TRUE;
+}
+
+static inline gboolean G_GNUC_PURE
+rect_contains_rect (const graphene_rect_t *r1,
+                    const graphene_rect_t *r2)
+{
+  if (r2->origin.x >= r1->origin.x &&
+      (r2->origin.x + r2->size.width) <= (r1->origin.x + r1->size.width) &&
+      r2->origin.y >= r1->origin.y &&
+      (r2->origin.y + r2->size.height) <= (r1->origin.y + r1->size.height))
+    return TRUE;
+  else
+    return FALSE;
+}
+
+static inline gboolean
+rounded_rect_has_corner (const GskRoundedRect *r,
+                         guint                 i)
+{
+  return r->corner[i].width > 0 && r->corner[i].height > 0;
+}
+
+/* Current clip is NOT rounded but new one is definitely! */
+static inline gboolean
+intersect_rounded_rectilinear (const graphene_rect_t *non_rounded,
+                               const GskRoundedRect  *rounded,
+                               GskRoundedRect        *result)
+{
+  bool corners[4];
+
+  /* Intersects with top left corner? */
+  corners[0] = rounded_rect_has_corner (rounded, 0) &&
+               rect_intersects (non_rounded,
+                                &rounded_rect_corner (rounded, 0));
+  /* top right? */
+  corners[1] = rounded_rect_has_corner (rounded, 1) &&
+               rect_intersects (non_rounded,
+                                &rounded_rect_corner (rounded, 1));
+  /* bottom right? */
+  corners[2] = rounded_rect_has_corner (rounded, 2) &&
+               rect_intersects (non_rounded,
+                                &rounded_rect_corner (rounded, 2));
+  /* bottom left */
+  corners[3] = rounded_rect_has_corner (rounded, 3) &&
+               rect_intersects (non_rounded,
+                                &rounded_rect_corner (rounded, 3));
+
+  if (corners[0] && !rect_contains_rect (non_rounded, &rounded_rect_corner (rounded, 0)))
+    return FALSE;
+  if (corners[1] && !rect_contains_rect (non_rounded, &rounded_rect_corner (rounded, 1)))
+    return FALSE;
+  if (corners[2] && !rect_contains_rect (non_rounded, &rounded_rect_corner (rounded, 2)))
+    return FALSE;
+  if (corners[3] && !rect_contains_rect (non_rounded, &rounded_rect_corner (rounded, 3)))
+    return FALSE;
+
+  /* We do intersect with at least one of the corners, but in such a way that the
+   * intersection between the two clips can still be represented by a single rounded
+   * rect in a trivial way. do that. */
+  graphene_rect_intersection (non_rounded, &rounded->bounds, &result->bounds);
+
+  for (int i = 0; i < 4; i++)
+    {
+      if (corners[i])
+        result->corner[i] = rounded->corner[i];
+      else
+        result->corner[i].width = result->corner[i].height = 0;
+    }
+
+  return TRUE;
+}
 
 static void
 init_projection_matrix (graphene_matrix_t     *projection,
@@ -258,7 +405,16 @@ gsk_gl_render_job_pop_modelview (GskGLRenderJob *job)
     }
 }
 
-static inline GskRoundedRect *
+static inline gboolean
+gsk_gl_render_job_clip_is_rectilinear (GskGLRenderJob *job)
+{
+  if (job->clip->len == 0)
+    return TRUE;
+  else
+    return g_array_index (job->clip, GskGLRenderClip, job->clip->len - 1).is_rectilinear;
+}
+
+static inline const GskRoundedRect *
 gsk_gl_render_job_get_clip (GskGLRenderJob *job)
 {
   if (job->clip->len == 0)
@@ -405,71 +561,11 @@ gsk_gl_render_job_free (GskGLRenderJob *job)
   g_slice_free (GskGLRenderJob, job);
 }
 
-static inline gboolean G_GNUC_PURE
-node_is_invisible (const GskRenderNode *node)
-{
-  return node->bounds.size.width == 0.0f ||
-         node->bounds.size.height == 0.0f ||
-         isnan (node->bounds.size.width) ||
-         isnan (node->bounds.size.height);
-}
-
-static inline gboolean G_GNUC_PURE
-node_supports_transform (GskRenderNode *node)
-{
-  /* Some nodes can't handle non-trivial transforms without being
-   * rendered to a texture (e.g. rotated clips, etc.). Some however work
-   * just fine, mostly because they already draw their child to a
-   * texture and just render the texture manipulated in some way, think
-   * opacity or color matrix.
-   */
-
-  switch ((int)gsk_render_node_get_node_type (node))
-    {
-      case GSK_COLOR_NODE:
-      case GSK_OPACITY_NODE:
-      case GSK_COLOR_MATRIX_NODE:
-      case GSK_TEXTURE_NODE:
-      case GSK_CROSS_FADE_NODE:
-      case GSK_LINEAR_GRADIENT_NODE:
-      case GSK_DEBUG_NODE:
-      case GSK_TEXT_NODE:
-        return TRUE;
-
-      case GSK_TRANSFORM_NODE:
-        return node_supports_transform (gsk_transform_node_get_child (node));
-
-      default:
-        return FALSE;
-    }
-}
-
-static inline gboolean G_GNUC_PURE
-rect_intersects (const graphene_rect_t *r1,
-                 const graphene_rect_t *r2)
-{
-  /* Assume both rects are already normalized, as they usually are */
-  if (r1->origin.x > (r2->origin.x + r2->size.width) ||
-      (r1->origin.x + r1->size.width) < r2->origin.x)
-    return FALSE;
-
-  if (r1->origin.y > (r2->origin.y + r2->size.height) ||
-      (r1->origin.y + r1->size.height) < r2->origin.y)
-    return FALSE;
-
-  return TRUE;
-}
-
-static gboolean
+static inline gboolean
 gsk_gl_render_job_node_overlaps_clip (GskGLRenderJob *job,
                                       GskRenderNode  *node)
 {
-  GskRoundedRect *clip;
-
-  g_assert (job != NULL);
-  g_assert (node != NULL);
-
-  clip = gsk_gl_render_job_get_clip (job);
+  const GskRoundedRect *clip = gsk_gl_render_job_get_clip (job);
 
   if (clip != NULL)
     {
@@ -589,6 +685,84 @@ gsk_gl_render_job_visit_linear_gradient_node (GskGLRenderJob *job,
 }
 
 static void
+gsk_gl_render_job_visit_clipped_child (GskGLRenderJob       *job,
+                                       GskRenderNode        *node,
+                                       const GskRoundedRect *clip)
+{
+  GskRenderNode *child = gsk_clip_node_get_child (node);
+  graphene_rect_t transformed_clip;
+  GskRoundedRect intersection;
+
+  gsk_gl_render_job_transform_bounds (job, &clip->bounds, &transformed_clip);
+
+  if (gsk_gl_render_job_clip_is_rectilinear (job))
+    {
+      const GskRoundedRect *current_clip = gsk_gl_render_job_get_clip (job);
+
+      memset (&intersection, 0, sizeof (GskRoundedRect));
+      graphene_rect_intersection (&transformed_clip,
+                                  &current_clip->bounds,
+                                  &intersection.bounds);
+
+      gsk_gl_render_job_push_clip (job, &intersection);
+      gsk_gl_render_job_visit_node (job, child);
+      gsk_gl_render_job_pop_clip (job);
+    }
+  else if (intersect_rounded_rectilinear (&transformed_clip, clip, &intersection))
+    {
+      gsk_gl_render_job_push_clip (job, &intersection);
+      gsk_gl_render_job_visit_node (job, child);
+      gsk_gl_render_job_pop_clip (job);
+    }
+  else
+    {
+#if 0
+      GskRoundedRect scaled_clip;
+      TextureRegion region;
+      gboolean is_offscreen;
+
+      scaled_clip = GSK_ROUNDED_RECT_INIT (clip->origin.x * job->scale_x,
+                                           clip->origin.y * scale_y,
+                                           clip->size.width * job->scale_x,
+                                           clip->size.height * scale_y);
+
+      gsk_gl_render_job_push_clip (job, &scaled_clip);
+      if (!add_offscreen_ops (self, builder, &child->bounds,
+                              child,
+                              &region, &is_offscreen,
+                              FORCE_OFFSCREEN))
+        g_assert_not_reached ();
+      gsk_gl_render_job_pop_clip (job);
+
+      /* TODO: offscreen stuff will tweak these a bit */
+
+      gsk_gl_program_begin_draw (job->driver->blit,
+                                 &job->viewport,
+                                 &job->projection,
+                                 &modelview->matrix,
+                                 &clip->bounds);
+      gsk_gl_program_set_uniform_texture (job->driver->blit,
+                                          UNIFORM_SHARED_SOURCE,
+                                          GL_TEXTURE_2D,
+                                          GL_TEXTURE0,
+                                          region.texture_id);
+      gsk_gl_program_end_draw (job->driver->blit);
+#endif
+    }
+}
+
+static void
+gsk_gl_render_job_visit_clip_node (GskGLRenderJob *job,
+                                   GskRenderNode  *node)
+{
+  const graphene_rect_t *clip = gsk_clip_node_get_clip (node);
+  GskRenderNode *child = gsk_clip_node_get_child (node);
+  GskRoundedRect rounded_clip = { .bounds = *clip };
+
+  gsk_gl_render_job_visit_clipped_child (job, child, &rounded_clip);
+}
+
+static void
 gsk_gl_render_job_visit_transform_node (GskGLRenderJob *job,
                                         GskRenderNode  *node)
 {
@@ -689,11 +863,14 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
       gsk_gl_render_job_visit_transform_node (job, node);
     break;
 
+    case GSK_CLIP_NODE:
+      gsk_gl_render_job_visit_clip_node (job, node);
+    break;
+
     case GSK_BLEND_NODE:
     case GSK_BLUR_NODE:
     case GSK_BORDER_NODE:
     case GSK_CAIRO_NODE:
-    case GSK_CLIP_NODE:
     case GSK_COLOR_MATRIX_NODE:
     case GSK_CONIC_GRADIENT_NODE:
     case GSK_CROSS_FADE_NODE:
