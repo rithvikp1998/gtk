@@ -135,6 +135,36 @@ node_supports_transform (GskRenderNode *node)
     }
 }
 
+static inline gboolean
+rounded_inner_rect_contains_rect (const GskRoundedRect  *rounded,
+                                  const graphene_rect_t *rect)
+{
+  const graphene_rect_t *rounded_bounds = &rounded->bounds;
+  graphene_rect_t inner;
+  float offset_x;
+  float offset_y;
+
+  /* TODO: This is pretty conservative and we could go further,
+   *       more fine-grained checks to avoid offscreen drawing.
+   */
+
+  offset_x = MAX (rounded->corner[GSK_CORNER_TOP_LEFT].width,
+                  rounded->corner[GSK_CORNER_BOTTOM_LEFT].width);
+  offset_y = MAX (rounded->corner[GSK_CORNER_TOP_LEFT].height,
+                  rounded->corner[GSK_CORNER_TOP_RIGHT].height);
+
+  inner.origin.x = rounded_bounds->origin.x + offset_x;
+  inner.origin.y = rounded_bounds->origin.y + offset_y;
+  inner.size.width = rounded_bounds->size.width - offset_x -
+                     MAX (rounded->corner[GSK_CORNER_TOP_RIGHT].width,
+                          rounded->corner[GSK_CORNER_BOTTOM_RIGHT].width);
+  inner.size.height = rounded_bounds->size.height - offset_y -
+                      MAX (rounded->corner[GSK_CORNER_BOTTOM_LEFT].height,
+                           rounded->corner[GSK_CORNER_BOTTOM_RIGHT].height);
+
+  return graphene_rect_contains_rect (&inner, rect);
+}
+
 static inline gboolean G_GNUC_PURE
 rect_intersects (const graphene_rect_t *r1,
                  const graphene_rect_t *r2)
@@ -686,10 +716,9 @@ gsk_gl_render_job_visit_linear_gradient_node (GskGLRenderJob *job,
 
 static void
 gsk_gl_render_job_visit_clipped_child (GskGLRenderJob       *job,
-                                       GskRenderNode        *node,
+                                       GskRenderNode        *child,
                                        const GskRoundedRect *clip)
 {
-  GskRenderNode *child = gsk_clip_node_get_child (node);
   graphene_rect_t transformed_clip;
   GskRoundedRect intersection;
 
@@ -760,6 +789,119 @@ gsk_gl_render_job_visit_clip_node (GskGLRenderJob *job,
   GskRoundedRect rounded_clip = { .bounds = *clip };
 
   gsk_gl_render_job_visit_clipped_child (job, child, &rounded_clip);
+}
+
+static void
+gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
+                                           GskRenderNode  *node)
+{
+  const GskRoundedRect *current_clip;
+  const GskRoundedRect *clip;
+  GskRenderNode *child;
+  GskRoundedRect transformed_clip;
+  float scale_x = job->scale_x;
+  float scale_y = job->scale_y;
+  gboolean need_offscreen;
+
+  child = gsk_rounded_clip_node_get_child (node);
+  if (node_is_invisible (child))
+    return;
+
+  clip = gsk_rounded_clip_node_get_clip (node);
+  current_clip = gsk_gl_render_job_get_clip (job);
+
+  gsk_gl_render_job_transform_bounds (job, &clip->bounds, &transformed_clip.bounds);
+
+  for (guint i = 0; i < 4; i++)
+    {
+      transformed_clip.corner[i].width = clip->corner[i].width * scale_x;
+      transformed_clip.corner[i].height = clip->corner[i].height * scale_y;
+    }
+
+  if (gsk_rounded_rect_is_rectilinear (clip))
+    {
+      GskRoundedRect intersected_clip;
+
+      if (intersect_rounded_rectilinear (&current_clip->bounds,
+                                         &transformed_clip,
+                                         &intersected_clip))
+        {
+          gsk_gl_render_job_push_clip (job, &intersected_clip);
+          gsk_gl_render_job_visit_node (job, child);
+          gsk_gl_render_job_pop_clip (job);
+          g_print ("All good\n");
+          return;
+        }
+    }
+
+  /* After this point we are really working with a new and a current clip
+   * which both have rounded corners.
+   */
+
+  if (job->clip->len <= 1)
+    need_offscreen = FALSE;
+  else if (rounded_inner_rect_contains_rect (current_clip, &transformed_clip.bounds))
+    need_offscreen = FALSE;
+  else
+    need_offscreen = TRUE;
+
+  if (!need_offscreen)
+    {
+      /* If the new clip entirely contains the current clip, the intersection is simply
+       * the current clip, so we can ignore the new one.
+       */
+      if (rounded_inner_rect_contains_rect (&transformed_clip, &current_clip->bounds))
+        {
+          gsk_gl_render_job_visit_node (job, child);
+        }
+      else
+        {
+          /* TODO: Intersect current and new clip */
+          gsk_gl_render_job_push_clip (job, &transformed_clip);
+          gsk_gl_render_job_visit_node (job, child);
+          gsk_gl_render_job_pop_clip (job);
+        }
+    }
+
+#if 0
+  else
+    {
+      GskRoundedRect scaled_clip;
+      gboolean is_offscreen;
+      TextureRegion region;
+      /* NOTE: We are *not* transforming the clip by the current modelview here.
+       *       We instead draw the untransformed clip to a texture and then transform
+       *       that texture.
+       *
+       *       We do, however, apply the scale factor to the child clip of course.
+       */
+      scaled_clip.bounds.origin.x = clip->bounds.origin.x * scale_x;
+      scaled_clip.bounds.origin.y = clip->bounds.origin.y * scale_y;
+      scaled_clip.bounds.size.width = clip->bounds.size.width * scale_x;
+      scaled_clip.bounds.size.height = clip->bounds.size.height * scale_y;
+
+      /* Increase corner radius size by scale factor */
+      for (i = 0; i < 4; i ++)
+        {
+          scaled_clip.corner[i].width = clip->corner[i].width * scale_x;
+          scaled_clip.corner[i].height = clip->corner[i].height * scale_y;
+        }
+
+      ops_push_clip (builder, &scaled_clip);
+      if (!add_offscreen_ops (self, builder, &node->bounds,
+                              child,
+                              &region, &is_offscreen,
+                              0))
+        g_assert_not_reached ();
+
+      ops_pop_clip (builder);
+
+      ops_set_program (builder, &self->programs->blit_program);
+      ops_set_texture (builder, region.texture_id);
+
+      load_offscreen_vertex_data (ops_draw (builder, NULL), node, builder);
+    }
+#endif
 }
 
 static void
@@ -867,6 +1009,10 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
       gsk_gl_render_job_visit_clip_node (job, node);
     break;
 
+    case GSK_ROUNDED_CLIP_NODE:
+      gsk_gl_render_job_visit_rounded_clip_node (job, node);
+    break;
+
     case GSK_BLEND_NODE:
     case GSK_BLUR_NODE:
     case GSK_BORDER_NODE:
@@ -882,7 +1028,6 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
     case GSK_REPEATING_LINEAR_GRADIENT_NODE:
     case GSK_REPEATING_RADIAL_GRADIENT_NODE:
     case GSK_REPEAT_NODE:
-    case GSK_ROUNDED_CLIP_NODE:
     case GSK_SHADOW_NODE:
     case GSK_TEXTURE_NODE:
     case GSK_TEXT_NODE:
