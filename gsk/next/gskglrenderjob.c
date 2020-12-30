@@ -33,8 +33,8 @@
 #include "gskglprogramprivate.h"
 #include "gskglrenderjobprivate.h"
 
-#define ORTHO_NEAR_PLANE -10000
-#define ORTHO_FAR_PLANE   10000
+#define ORTHO_NEAR_PLANE   -10000
+#define ORTHO_FAR_PLANE     10000
 #define MAX_GRADIENT_STOPS  6
 
 struct _GskGLRenderJob
