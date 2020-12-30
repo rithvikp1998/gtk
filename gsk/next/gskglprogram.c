@@ -27,14 +27,15 @@
 
 struct _GskGLProgram
 {
-  GObject               parent_instance;
-  int                   id;
-  char                 *name;
-  GArray               *uniform_locations;
-  GskGLCommandQueue   *command_queue;
-  int                  projection_location;
-  int                  modelview_location;
-  int                  viewport_location;
+  GObject            parent_instance;
+  int                id;
+  char              *name;
+  GArray            *uniform_locations;
+  GskGLCommandQueue *command_queue;
+  int                projection_location;
+  int                modelview_location;
+  int                viewport_location;
+  int                clip_rect_location;
 };
 
 G_DEFINE_TYPE (GskGLProgram, gsk_gl_program, G_TYPE_OBJECT)
@@ -105,6 +106,7 @@ gsk_gl_program_init (GskGLProgram *self)
   self->viewport_location = -1;
   self->projection_location = -1;
   self->modelview_location = -1;
+  self->clip_rect_location = -1;
 }
 
 /**
@@ -159,6 +161,8 @@ gsk_gl_program_add_uniform (GskGLProgram *self,
     self->projection_location = location;
   else if (key == UNIFORM_SHARED_VIEWPORT)
     self->viewport_location = location;
+  else if (key == UNIFORM_SHARED_CLIP_RECT)
+    self->clip_rect_location = location;
 
   return TRUE;
 }
@@ -369,7 +373,8 @@ void
 gsk_gl_program_begin_draw (GskGLProgram            *self,
                            const graphene_rect_t   *viewport,
                            const graphene_matrix_t *projection,
-                           const graphene_matrix_t *modelview)
+                           const graphene_matrix_t *modelview,
+                           const GskRoundedRect    *clip)
 {
   g_assert (GSK_IS_GL_PROGRAM (self));
   g_assert (viewport != NULL);
@@ -394,6 +399,12 @@ gsk_gl_program_begin_draw (GskGLProgram            *self,
                                              self->id,
                                              self->projection_location,
                                              projection);
+
+  if (clip != NULL && self->clip_rect_location > -1)
+    gsk_gl_command_queue_set_uniform_rounded_rect (self->command_queue,
+                                                   self->id,
+                                                   self->clip_rect_location,
+                                                   clip);
 
   gsk_gl_command_queue_begin_draw (self->command_queue, self->id, viewport);
 }

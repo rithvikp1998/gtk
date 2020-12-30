@@ -254,13 +254,13 @@ gsk_gl_render_job_pop_modelview (GskGLRenderJob *job)
     }
 }
 
-static inline GskGLRenderClip *
+static inline GskRoundedRect *
 gsk_gl_render_job_get_clip (GskGLRenderJob *job)
 {
   if (job->clip->len == 0)
     return NULL;
   else
-    return &g_array_index (job->clip, GskGLRenderClip, job->clip->len - 1);
+    return &g_array_index (job->clip, GskGLRenderClip, job->clip->len - 1).rect;
 }
 
 static void
@@ -430,18 +430,21 @@ static gboolean
 gsk_gl_render_job_node_overlaps_clip (GskGLRenderJob *job,
                                       GskRenderNode  *node)
 {
-  GskGLRenderClip *clip;
-  graphene_rect_t transformed_bounds;
+  GskRoundedRect *clip;
 
   g_assert (job != NULL);
   g_assert (node != NULL);
 
-  if (!(clip = gsk_gl_render_job_get_clip (job)))
-    return TRUE;
+  clip = gsk_gl_render_job_get_clip (job);
 
-  gsk_gl_render_job_transform_bounds (job, &node->bounds, &transformed_bounds);
+  if (clip != NULL)
+    {
+      graphene_rect_t transformed_bounds;
+      gsk_gl_render_job_transform_bounds (job, &node->bounds, &transformed_bounds);
+      return rect_intersects (&clip->bounds, &transformed_bounds);
+    }
 
-  return rect_intersects (&clip->rect.bounds, &transformed_bounds);
+  return TRUE;
 }
 
 static void
@@ -537,19 +540,11 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
 
     case GSK_COLOR_NODE:
       {
-        GskGLRenderClip *clip = gsk_gl_render_job_get_clip (job);
-
-        g_assert (modelview != NULL);
-        g_assert (g_str_equal (gsk_gl_program_get_name (job->driver->color), "color"));
-
         gsk_gl_program_begin_draw (job->driver->color,
                                    &job->viewport,
                                    &job->projection,
-                                   &modelview->matrix);
-        if (clip != NULL)
-          gsk_gl_program_set_uniform_rounded_rect (job->driver->color,
-                                                   UNIFORM_SHARED_CLIP_RECT,
-                                                   &clip->rect);
+                                   &modelview->matrix,
+                                   gsk_gl_render_job_get_clip (job));
         gsk_gl_program_set_uniform_color (job->driver->color,
                                           UNIFORM_COLOR_COLOR,
                                           gsk_color_node_get_color (node));
