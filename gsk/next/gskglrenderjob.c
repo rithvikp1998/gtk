@@ -412,6 +412,36 @@ node_is_invisible (const GskRenderNode *node)
 }
 
 static inline gboolean G_GNUC_PURE
+node_supports_transform (GskRenderNode *node)
+{
+  /* Some nodes can't handle non-trivial transforms without being
+   * rendered to a texture (e.g. rotated clips, etc.). Some however work
+   * just fine, mostly because they already draw their child to a
+   * texture and just render the texture manipulated in some way, think
+   * opacity or color matrix.
+   */
+
+  switch ((int)gsk_render_node_get_node_type (node))
+    {
+      case GSK_COLOR_NODE:
+      case GSK_OPACITY_NODE:
+      case GSK_COLOR_MATRIX_NODE:
+      case GSK_TEXTURE_NODE:
+      case GSK_CROSS_FADE_NODE:
+      case GSK_LINEAR_GRADIENT_NODE:
+      case GSK_DEBUG_NODE:
+      case GSK_TEXT_NODE:
+        return TRUE;
+
+      case GSK_TRANSFORM_NODE:
+        return node_supports_transform (gsk_transform_node_get_child (node));
+
+      default:
+        return FALSE;
+    }
+}
+
+static inline gboolean G_GNUC_PURE
 rect_intersects (const graphene_rect_t *r1,
                  const graphene_rect_t *r2)
 {
