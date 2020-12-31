@@ -1156,9 +1156,12 @@ gsk_gl_command_queue_create_texture (GskGLCommandQueue *self,
                                      int                min_filter,
                                      int                mag_filter)
 {
-  GLuint texture_id;
+  GLuint texture_id = 0;
 
   g_return_val_if_fail (GSK_IS_GL_COMMAND_QUEUE (self), -1);
+
+  if G_UNLIKELY (self->max_texture_size == -1)
+    glGetIntegerv (GL_MAX_TEXTURE_SIZE, &self->max_texture_size);
 
   if (width > self->max_texture_size || height > self->max_texture_size)
     return -1;

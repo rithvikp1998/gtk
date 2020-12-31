@@ -259,6 +259,8 @@ gsk_gl_renderer_render_texture (GskRenderer           *renderer,
   width = ceilf (viewport->size.width);
   height = ceilf (viewport->size.height);
 
+  gdk_gl_context_make_current (context);
+
   if (!gsk_next_driver_create_render_target (self->driver,
                                              width,
                                              height,
