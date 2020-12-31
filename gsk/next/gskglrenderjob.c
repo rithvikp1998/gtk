@@ -479,13 +479,11 @@ gsk_gl_render_job_pop_clip (GskGLRenderJob *job)
   job->clip->len--;
 }
 
-static void
+static inline void
 gsk_gl_render_job_offset (GskGLRenderJob *job,
                           float           offset_x,
                           float           offset_y)
 {
-  g_assert (job != NULL);
-
   job->offset_x += offset_x;
   job->offset_y += offset_y;
 }
@@ -829,7 +827,6 @@ gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
           gsk_gl_render_job_push_clip (job, &intersected_clip);
           gsk_gl_render_job_visit_node (job, child);
           gsk_gl_render_job_pop_clip (job);
-          g_print ("All good\n");
           return;
         }
     }
@@ -905,6 +902,160 @@ gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
 }
 
 static void
+gsk_gl_render_job_visit_border_node (GskGLRenderJob *job,
+                                     GskRenderNode  *node)
+{
+  GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
+  const GskRoundedRect *rounded_outline = gsk_border_node_get_outline (node);
+  const GdkRGBA *colors = gsk_border_node_get_colors (node);
+  const float *widths = gsk_border_node_get_widths (node);
+  struct {
+    float w;
+    float h;
+  } sizes[4];
+
+  if (gsk_border_node_get_uniform (node))
+    {
+      gsk_gl_program_begin_draw (job->driver->inset_shadow,
+                                 &job->viewport,
+                                 &job->projection,
+                                 &modelview->matrix,
+                                 gsk_gl_render_job_get_clip (job));
+      gsk_gl_program_set_uniform_rounded_rect (job->driver->inset_shadow,
+                                               UNIFORM_INSET_SHADOW_OUTLINE_RECT,
+                                               rounded_outline);
+      gsk_gl_program_set_uniform_color (job->driver->inset_shadow,
+                                        UNIFORM_INSET_SHADOW_COLOR,
+                                        &colors[0]);
+      gsk_gl_program_set_uniform1f (job->driver->inset_shadow,
+                                    UNIFORM_INSET_SHADOW_SPREAD,
+                                    widths[0]);
+      gsk_gl_program_set_uniform2f (job->driver->inset_shadow,
+                                    UNIFORM_INSET_SHADOW_OFFSET,
+                                    0, 0);
+      gsk_gl_program_end_draw (job->driver->inset_shadow);
+      return;
+    }
+
+#if 0
+  /* Top left */
+  if (widths[3] > 0)
+    sizes[0].w = MAX (widths[3], rounded_outline->corner[0].width);
+  else
+    sizes[0].w = 0;
+
+  if (widths[0] > 0)
+    sizes[0].h = MAX (widths[0], rounded_outline->corner[0].height);
+  else
+    sizes[0].h = 0;
+
+  /* Top right */
+  if (widths[1] > 0)
+    sizes[1].w = MAX (widths[1], rounded_outline->corner[1].width);
+  else
+    sizes[1].w = 0;
+
+  if (widths[0] > 0)
+    sizes[1].h = MAX (widths[0], rounded_outline->corner[1].height);
+  else
+    sizes[1].h = 0;
+
+  /* Bottom right */
+  if (widths[1] > 0)
+    sizes[2].w = MAX (widths[1], rounded_outline->corner[2].width);
+  else
+    sizes[2].w = 0;
+
+  if (widths[2] > 0)
+    sizes[2].h = MAX (widths[2], rounded_outline->corner[2].height);
+  else
+    sizes[2].h = 0;
+
+
+  /* Bottom left */
+  if (widths[3] > 0)
+    sizes[3].w = MAX (widths[3], rounded_outline->corner[3].width);
+  else
+    sizes[3].w = 0;
+
+  if (widths[2] > 0)
+    sizes[3].h = MAX (widths[2], rounded_outline->corner[3].height);
+  else
+    sizes[3].h = 0;
+
+  {
+    const float min_x = builder->dx + node->bounds.origin.x;
+    const float min_y = builder->dy + node->bounds.origin.y;
+    const float max_x = min_x + node->bounds.size.width;
+    const float max_y = min_y + node->bounds.size.height;
+    const GskQuadVertex side_data[4][6] = {
+      /* Top */
+      {
+        { { min_x,              min_y              }, { 0, 1 }, }, /* Upper left */
+        { { min_x + sizes[0].w, min_y + sizes[0].h }, { 0, 0 }, }, /* Lower left */
+        { { max_x,              min_y              }, { 1, 1 }, }, /* Upper right */
+
+        { { max_x - sizes[1].w, min_y + sizes[1].h }, { 1, 0 }, }, /* Lower right */
+        { { min_x + sizes[0].w, min_y + sizes[0].h }, { 0, 0 }, }, /* Lower left */
+        { { max_x,              min_y              }, { 1, 1 }, }, /* Upper right */
+      },
+      /* Right */
+      {
+        { { max_x - sizes[1].w, min_y + sizes[1].h }, { 0, 1 }, }, /* Upper left */
+        { { max_x - sizes[2].w, max_y - sizes[2].h }, { 0, 0 }, }, /* Lower left */
+        { { max_x,              min_y              }, { 1, 1 }, }, /* Upper right */
+
+        { { max_x,              max_y              }, { 1, 0 }, }, /* Lower right */
+        { { max_x - sizes[2].w, max_y - sizes[2].h }, { 0, 0 }, }, /* Lower left */
+        { { max_x,              min_y              }, { 1, 1 }, }, /* Upper right */
+      },
+      /* Bottom */
+      {
+        { { min_x + sizes[3].w, max_y - sizes[3].h }, { 0, 1 }, }, /* Upper left */
+        { { min_x,              max_y              }, { 0, 0 }, }, /* Lower left */
+        { { max_x - sizes[2].w, max_y - sizes[2].h }, { 1, 1 }, }, /* Upper right */
+
+        { { max_x,              max_y              }, { 1, 0 }, }, /* Lower right */
+        { { min_x            ,  max_y              }, { 0, 0 }, }, /* Lower left */
+        { { max_x - sizes[2].w, max_y - sizes[2].h }, { 1, 1 }, }, /* Upper right */
+      },
+      /* Left */
+      {
+        { { min_x,              min_y              }, { 0, 1 }, }, /* Upper left */
+        { { min_x,              max_y              }, { 0, 0 }, }, /* Lower left */
+        { { min_x + sizes[0].w, min_y + sizes[0].h }, { 1, 1 }, }, /* Upper right */
+
+        { { min_x + sizes[3].w, max_y - sizes[3].h }, { 1, 0 }, }, /* Lower right */
+        { { min_x,              max_y              }, { 0, 0 }, }, /* Lower left */
+        { { min_x + sizes[0].w, min_y + sizes[0].h }, { 1, 1 }, }, /* Upper right */
+      }
+    };
+    int indices[4] = { 0, 1, 2, 3 };
+    GskRoundedRect outline;
+
+    /* We sort them by color */
+    sort_border_sides (colors, indices);
+
+    /* Prepare outline */
+    outline = transform_rect (self, builder, rounded_outline);
+
+    ops_set_program (builder, &self->programs->border_program);
+    ops_set_border_width (builder, widths);
+    ops_set_border (builder, &outline);
+
+    for (guint i = 0; i < 4; i++)
+      {
+        if (widths[indices[i]] > 0)
+          {
+            ops_set_border_color (builder, &colors[indices[i]]);
+            ops_draw (builder, side_data[indices[i]]);
+          }
+      }
+  }
+#endif
+}
+
+static void
 gsk_gl_render_job_visit_transform_node (GskGLRenderJob *job,
                                         GskRenderNode  *node)
 {
@@ -942,6 +1093,7 @@ gsk_gl_render_job_visit_transform_node (GskGLRenderJob *job,
     case GSK_TRANSFORM_CATEGORY_ANY:
     case GSK_TRANSFORM_CATEGORY_UNKNOWN:
       g_warning ("TODO: complex transform\n");
+
     break;
 
     default:
@@ -1013,9 +1165,12 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
       gsk_gl_render_job_visit_rounded_clip_node (job, node);
     break;
 
+    case GSK_BORDER_NODE:
+      gsk_gl_render_job_visit_border_node (job, node);
+    break;
+
     case GSK_BLEND_NODE:
     case GSK_BLUR_NODE:
-    case GSK_BORDER_NODE:
     case GSK_CAIRO_NODE:
     case GSK_COLOR_MATRIX_NODE:
     case GSK_CONIC_GRADIENT_NODE:
