@@ -146,10 +146,12 @@ alloc_uniform_data (GByteArray *buffer,
     {
       guint prefix_align = align - masked;
       g_byte_array_set_size (buffer, buffer->len + prefix_align);
+      memset (buffer->data + buffer->len - prefix_align, 0, prefix_align);
     }
 
   *offset = buffer->len;
   g_byte_array_set_size (buffer, buffer->len + size);
+  memset (buffer->data + buffer->len - size, 0, size);
 
   g_assert ((*offset & (align - 1)) == 0);
 
