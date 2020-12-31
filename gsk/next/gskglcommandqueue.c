@@ -560,6 +560,7 @@ gsk_gl_command_queue_delete_program (GskGLCommandQueue *self,
 {
   g_return_if_fail (GSK_IS_GL_COMMAND_QUEUE (self));
 
+  gsk_gl_command_queue_make_current (self);
   glDeleteProgram (program);
   gsk_gl_uniform_state_clear_program (self->uniforms, program);
 }
