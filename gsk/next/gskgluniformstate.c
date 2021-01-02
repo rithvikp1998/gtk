@@ -134,7 +134,7 @@ alloc_uniform_data (GByteArray *buffer,
                     guint       size,
                     guint      *offset)
 {
-  guint align = size > 4 ? GLIB_SIZEOF_VOID_P : 4;
+  guint align = size > 8 ? 16 : (size > 4 ? 8 : 4);
   guint masked = buffer->len & (align - 1);
   guint old_len = buffer->len;
 
