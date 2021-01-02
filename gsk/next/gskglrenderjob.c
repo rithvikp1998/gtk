@@ -270,12 +270,11 @@ init_projection_matrix (graphene_matrix_t     *projection,
 static inline GskGLRenderModelview *
 gsk_gl_render_job_get_modelview (GskGLRenderJob *job)
 {
-  if (job->modelview->len > 0)
-    return &g_array_index (job->modelview,
-                           GskGLRenderModelview,
-                           job->modelview->len - 1);
-  g_assert_not_reached ();
-  return NULL;
+  g_assert (job->modelview->len > 0);
+
+  return &g_array_index (job->modelview,
+                         GskGLRenderModelview,
+                         job->modelview->len - 1);
 }
 
 static void
@@ -447,10 +446,9 @@ gsk_gl_render_job_clip_is_rectilinear (GskGLRenderJob *job)
 static inline const GskRoundedRect *
 gsk_gl_render_job_get_clip (GskGLRenderJob *job)
 {
-  if (job->clip->len == 0)
-    return NULL;
-  else
-    return &g_array_index (job->clip, GskGLRenderClip, job->clip->len - 1).rect;
+  g_assert (job->clip->len > 0);
+
+  return &g_array_index (job->clip, GskGLRenderClip, job->clip->len - 1).rect;
 }
 
 static void
