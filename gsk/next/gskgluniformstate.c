@@ -221,7 +221,14 @@ setup_info:
   g_assert (program_info->uniform_info != NULL);
 
   if (location >= program_info->uniform_info->len)
-    g_array_set_size (program_info->uniform_info, location + 1);
+    {
+      guint prev = program_info->uniform_info->len;
+
+      g_array_set_size (program_info->uniform_info, location + 1);
+
+      for (guint i = prev; i < program_info->uniform_info->len; i++)
+        g_array_index (program_info->uniform_info, GskGLUniformInfo, i).initial = TRUE;
+    }
 
   alloc_uniform_data (state->uniform_data,
                       uniform_sizes[format] * MAX (1, array_count),
@@ -493,8 +500,11 @@ gsk_gl_uniform_state_set_matrix (GskGLUniformState       *state,
   g_assert (program > 0);
   g_assert (matrix != NULL);
 
+  g_print ("Set matrix: %u %u\n", program, location);
+
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_MATRIX, 1, location, &info)))
     {
+      g_print ("  initial = %d\n", info->initial);
       if (!info->initial)
         {
           if (graphene_matrix_equal_fast (u, matrix) ||
