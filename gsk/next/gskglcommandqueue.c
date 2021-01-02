@@ -395,6 +395,8 @@ gsk_gl_command_queue_uniform_snapshot_cb (const GskGLUniformInfo *info,
   GskGLCommandUniform uniform;
 
   g_assert (info != NULL);
+  g_assert (info->initial == FALSE);
+  g_assert (info->changed == TRUE);
   g_assert (GSK_IS_GL_COMMAND_QUEUE (self));
 
   uniform.location = location;
