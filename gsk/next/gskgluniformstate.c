@@ -136,6 +136,7 @@ alloc_uniform_data (GByteArray *buffer,
 {
   guint align = size > 4 ? GLIB_SIZEOF_VOID_P : 4;
   guint masked = buffer->len & (align - 1);
+  guint old_len = buffer->len;
 
   /* Try to give a more natural alignment based on the size
    * of the uniform. In case it's greater than 4 try to at least
@@ -146,12 +147,11 @@ alloc_uniform_data (GByteArray *buffer,
     {
       guint prefix_align = align - masked;
       g_byte_array_set_size (buffer, buffer->len + prefix_align);
-      memset (buffer->data + buffer->len - prefix_align, 0, prefix_align);
     }
 
   *offset = buffer->len;
   g_byte_array_set_size (buffer, buffer->len + size);
-  memset (buffer->data + buffer->len - size, 0, size);
+  memset (buffer->data + old_len, 0, buffer->len - old_len);
 
   g_assert ((*offset & (align - 1)) == 0);
 
