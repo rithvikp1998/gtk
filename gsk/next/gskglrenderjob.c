@@ -724,7 +724,7 @@ gsk_gl_render_job_visit_clipped_child (GskGLRenderJob       *job,
     {
       const GskRoundedRect *current_clip = gsk_gl_render_job_get_clip (job);
 
-      memset (&intersection, 0, sizeof (GskRoundedRect));
+      memset (&intersection, 0, sizeof intersection);
       graphene_rect_intersection (&transformed_clip,
                                   &current_clip->bounds,
                                   &intersection.bounds);
@@ -791,9 +791,9 @@ static void
 gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
                                            GskRenderNode  *node)
 {
-  const GskRoundedRect *current_clip;
   const GskRoundedRect *clip;
   GskRenderNode *child;
+  GskRoundedRect current_clip;
   GskRoundedRect transformed_clip;
   float scale_x = job->scale_x;
   float scale_y = job->scale_y;
@@ -804,7 +804,7 @@ gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
     return;
 
   clip = gsk_rounded_clip_node_get_clip (node);
-  current_clip = gsk_gl_render_job_get_clip (job);
+  current_clip = *gsk_gl_render_job_get_clip (job);
 
   gsk_gl_render_job_transform_bounds (job, &clip->bounds, &transformed_clip.bounds);
 
@@ -818,7 +818,7 @@ gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
     {
       GskRoundedRect intersected_clip;
 
-      if (intersect_rounded_rectilinear (&current_clip->bounds,
+      if (intersect_rounded_rectilinear (&current_clip.bounds,
                                          &transformed_clip,
                                          &intersected_clip))
         {
@@ -835,7 +835,7 @@ gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
 
   if (job->clip->len <= 1)
     need_offscreen = FALSE;
-  else if (rounded_inner_rect_contains_rect (current_clip, &transformed_clip.bounds))
+  else if (rounded_inner_rect_contains_rect (&current_clip, &transformed_clip.bounds))
     need_offscreen = FALSE;
   else
     need_offscreen = TRUE;
@@ -845,7 +845,7 @@ gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
       /* If the new clip entirely contains the current clip, the intersection is simply
        * the current clip, so we can ignore the new one.
        */
-      if (rounded_inner_rect_contains_rect (&transformed_clip, &current_clip->bounds))
+      if (rounded_inner_rect_contains_rect (&transformed_clip, &current_clip.bounds))
         {
           gsk_gl_render_job_visit_node (job, child);
         }
