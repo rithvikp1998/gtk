@@ -729,40 +729,68 @@ static void
 gsk_gl_render_job_visit_linear_gradient_node (GskGLRenderJob *job,
                                               GskRenderNode  *node)
 {
+  GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
+  const GskColorStop *stops = gsk_linear_gradient_node_get_color_stops (node, NULL);
+  const graphene_point_t *start = gsk_linear_gradient_node_get_start (node);
+  const graphene_point_t *end = gsk_linear_gradient_node_get_end (node);
   int n_color_stops = gsk_linear_gradient_node_get_n_color_stops (node);
 
-  if (n_color_stops < MAX_GRADIENT_STOPS)
-    {
-      GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
-      const GskColorStop *stops = gsk_linear_gradient_node_get_color_stops (node, NULL);
-      const graphene_point_t *start = gsk_linear_gradient_node_get_start (node);
-      const graphene_point_t *end = gsk_linear_gradient_node_get_end (node);
+  g_assert (n_color_stops < MAX_GRADIENT_STOPS);
 
-      gsk_gl_program_begin_draw (job->driver->linear_gradient,
-                                 &job->viewport,
-                                 &job->projection,
-                                 &modelview->matrix,
-                                 gsk_gl_render_job_get_clip (job));
-      gsk_gl_program_set_uniform1i (job->driver->linear_gradient,
-                                    UNIFORM_LINEAR_GRADIENT_NUM_COLOR_STOPS,
-                                    n_color_stops);
-      gsk_gl_program_set_uniform1fv (job->driver->linear_gradient,
-                                     UNIFORM_LINEAR_GRADIENT_COLOR_STOPS,
-                                     n_color_stops * 5,
-                                     (const float *)stops);
-      gsk_gl_program_set_uniform2f (job->driver->linear_gradient,
-                                    UNIFORM_LINEAR_GRADIENT_START_POINT,
-                                    start->x, start->y);
-      gsk_gl_program_set_uniform2f (job->driver->linear_gradient,
-                                    UNIFORM_LINEAR_GRADIENT_END_POINT,
-                                    end->x, end->y);
-      gsk_gl_render_job_draw_rect (job, &node->bounds);
-      gsk_gl_program_end_draw (job->driver->linear_gradient);
-    }
-  else
-    {
-      gsk_gl_render_job_visit_as_fallback (job, node);
-    }
+  gsk_gl_program_begin_draw (job->driver->linear_gradient,
+                             &job->viewport,
+                             &job->projection,
+                             &modelview->matrix,
+                             gsk_gl_render_job_get_clip (job));
+  gsk_gl_program_set_uniform1i (job->driver->linear_gradient,
+                                UNIFORM_LINEAR_GRADIENT_NUM_COLOR_STOPS,
+                                n_color_stops);
+  gsk_gl_program_set_uniform1fv (job->driver->linear_gradient,
+                                 UNIFORM_LINEAR_GRADIENT_COLOR_STOPS,
+                                 n_color_stops * 5,
+                                 (const float *)stops);
+  gsk_gl_program_set_uniform2f (job->driver->linear_gradient,
+                                UNIFORM_LINEAR_GRADIENT_START_POINT,
+                                start->x, start->y);
+  gsk_gl_program_set_uniform2f (job->driver->linear_gradient,
+                                UNIFORM_LINEAR_GRADIENT_END_POINT,
+                                end->x, end->y);
+  gsk_gl_render_job_draw_rect (job, &node->bounds);
+  gsk_gl_program_end_draw (job->driver->linear_gradient);
+}
+
+static void
+gsk_gl_render_job_visit_conic_gradient_node (GskGLRenderJob *job,
+                                             GskRenderNode  *node)
+{
+  GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
+  const GskColorStop *stops = gsk_conic_gradient_node_get_color_stops (node, NULL);
+  const graphene_point_t *center = gsk_conic_gradient_node_get_center (node);
+  float rotation = gsk_conic_gradient_node_get_rotation (node);
+  int n_color_stops = gsk_conic_gradient_node_get_n_color_stops (node);
+
+  g_assert (n_color_stops < MAX_GRADIENT_STOPS);
+
+  gsk_gl_program_begin_draw (job->driver->conic_gradient,
+                             &job->viewport,
+                             &job->projection,
+                             &modelview->matrix,
+                             gsk_gl_render_job_get_clip (job));
+  gsk_gl_program_set_uniform1i (job->driver->conic_gradient,
+                                UNIFORM_CONIC_GRADIENT_NUM_COLOR_STOPS,
+                                n_color_stops);
+  gsk_gl_program_set_uniform1fv (job->driver->conic_gradient,
+                                 UNIFORM_CONIC_GRADIENT_COLOR_STOPS,
+                                 n_color_stops * 5,
+                                 (const float *)stops);
+  gsk_gl_program_set_uniform2f (job->driver->conic_gradient,
+                                UNIFORM_CONIC_GRADIENT_CENTER,
+                                center->x, center->y);
+  gsk_gl_program_set_uniform1f (job->driver->conic_gradient,
+                                UNIFORM_CONIC_GRADIENT_ROTATION,
+                                rotation);
+  gsk_gl_render_job_draw_rect (job, &node->bounds);
+  gsk_gl_program_end_draw (job->driver->conic_gradient);
 }
 
 static void
@@ -1370,10 +1398,6 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
       gsk_gl_render_job_visit_color_node (job, node);
     break;
 
-    case GSK_LINEAR_GRADIENT_NODE:
-      gsk_gl_render_job_visit_linear_gradient_node (job, node);
-    break;
-
     case GSK_TRANSFORM_NODE:
       gsk_gl_render_job_visit_transform_node (job, node);
     break;
@@ -1407,11 +1431,24 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
         gsk_gl_render_job_visit_unblurred_outset_shadow_node (job, node);
     break;
 
+    case GSK_LINEAR_GRADIENT_NODE:
+      if (gsk_linear_gradient_node_get_n_color_stops (node) < MAX_GRADIENT_STOPS)
+        gsk_gl_render_job_visit_linear_gradient_node (job, node);
+      else
+        gsk_gl_render_job_visit_as_fallback (job, node);
+    break;
+
+    case GSK_CONIC_GRADIENT_NODE:
+      if (gsk_conic_gradient_node_get_n_color_stops (node) < MAX_GRADIENT_STOPS)
+        gsk_gl_render_job_visit_conic_gradient_node (job, node);
+      else
+        gsk_gl_render_job_visit_as_fallback (job, node);
+    break;
+
     case GSK_BLEND_NODE:
     case GSK_BLUR_NODE:
     case GSK_CAIRO_NODE:
     case GSK_COLOR_MATRIX_NODE:
-    case GSK_CONIC_GRADIENT_NODE:
     case GSK_CROSS_FADE_NODE:
     case GSK_GL_SHADER_NODE:
     case GSK_OPACITY_NODE:
