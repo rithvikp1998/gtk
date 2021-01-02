@@ -80,6 +80,6 @@ GSK_GL_DEFINE_PROGRAM (repeat,
 GSK_GL_DEFINE_PROGRAM (unblurred_outset_shadow,
                        "/org/gtk/libgsk/glsl/unblurred_outset_shadow.glsl",
                        GSK_GL_ADD_UNIFORM (1, UNBLURRED_OUTSET_SHADOW_COLOR, u_color)
-                       GSK_GL_ADD_UNIFORM (1, UNBLURRED_OUTSET_SHADOW_SPREAD, u_spread)
-                       GSK_GL_ADD_UNIFORM (1, UNBLURRED_OUTSET_SHADOW_OFFSET, u_offset)
-                       GSK_GL_ADD_UNIFORM (2, UNBLURRED_OUTSET_SHADOW_OUTLINE_RECT, u_outline_rect))
+                       GSK_GL_ADD_UNIFORM (2, UNBLURRED_OUTSET_SHADOW_SPREAD, u_spread)
+                       GSK_GL_ADD_UNIFORM (3, UNBLURRED_OUTSET_SHADOW_OFFSET, u_offset)
+                       GSK_GL_ADD_UNIFORM (4, UNBLURRED_OUTSET_SHADOW_OUTLINE_RECT, u_outline_rect))
