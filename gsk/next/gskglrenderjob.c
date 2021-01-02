@@ -274,8 +274,8 @@ gsk_gl_render_job_get_modelview (GskGLRenderJob *job)
     return &g_array_index (job->modelview,
                            GskGLRenderModelview,
                            job->modelview->len - 1);
-  else
-    return NULL;
+  g_assert_not_reached ();
+  return NULL;
 }
 
 static void
