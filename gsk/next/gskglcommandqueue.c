@@ -256,18 +256,39 @@ begin_next_batch (GskGLCommandQueue *self)
   index = self->batches->len;
   g_array_set_size (self->batches, index + 1);
 
-  if (self->tail_batch_index != -1)
-    {
-      batch = &g_array_index (self->batches, GskGLCommandBatch, self->tail_batch_index);
-      batch->any.next_batch_index = index;
-    }
-
   batch = &g_array_index (self->batches, GskGLCommandBatch, index);
   batch->any.next_batch_index = -1;
 
-  self->tail_batch_index = index;
-
   return batch;
+}
+
+static void
+enqueue_batch (GskGLCommandQueue *self)
+{
+  GskGLCommandBatch *prev;
+  guint index;
+
+  g_assert (GSK_IS_GL_COMMAND_QUEUE (self));
+  g_assert (self->batches->len > 0);
+
+  index = self->batches->len - 1;
+
+  if (self->tail_batch_index != -1)
+    {
+      prev = &g_array_index (self->batches, GskGLCommandBatch, self->tail_batch_index);
+      prev->any.next_batch_index = index;
+    }
+
+  self->tail_batch_index = index;
+}
+
+static void
+discard_batch (GskGLCommandQueue *self)
+{
+  g_assert (GSK_IS_GL_COMMAND_QUEUE (self));
+  g_assert (self->batches->len > 0);
+
+  self->batches->len--;
 }
 
 void
@@ -330,6 +351,12 @@ gsk_gl_command_queue_end_draw (GskGLCommandQueue *self)
   
   g_assert (batch->any.kind == GSK_GL_COMMAND_KIND_DRAW);
 
+  if G_UNLIKELY (batch->draw.vbo_count == 0)
+    {
+      discard_batch (self);
+      return;
+    }
+
   /* Track the destination framebuffer in case it changed */
   batch->draw.framebuffer = self->attachments->fbo.id;
   self->attachments->fbo.changed = FALSE;
@@ -363,6 +390,8 @@ gsk_gl_command_queue_end_draw (GskGLCommandQueue *self)
           batch->draw.bind_count++;
         }
     }
+
+  enqueue_batch (self);
 
   self->in_draw = FALSE;
 }
@@ -415,6 +444,8 @@ gsk_gl_command_queue_clear (GskGLCommandQueue     *self,
   batch->any.next_batch_index = -1;
   batch->any.program = 0;
 
+  enqueue_batch (self);
+
   self->attachments->fbo.changed = FALSE;
 }
 
@@ -433,6 +464,8 @@ gsk_gl_command_queue_push_debug_group (GskGLCommandQueue *self,
   batch->debug_group.debug_group = g_string_chunk_insert (self->debug_groups, debug_group);
   batch->any.next_batch_index = -1;
   batch->any.program = 0;
+
+  enqueue_batch (self);
 }
 
 void
@@ -449,6 +482,8 @@ gsk_gl_command_queue_pop_debug_group (GskGLCommandQueue *self)
   batch->debug_group.debug_group = NULL;
   batch->any.next_batch_index = -1;
   batch->any.program = 0;
+
+  enqueue_batch (self);
 }
 
 GdkGLContext *
