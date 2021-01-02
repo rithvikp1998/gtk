@@ -1240,6 +1240,92 @@ gsk_gl_render_job_visit_blurred_inset_shadow_node (GskGLRenderJob *job,
 }
 
 static void
+gsk_gl_render_job_visit_unblurred_outset_shadow_node (GskGLRenderJob *job,
+                                                      GskRenderNode  *node)
+{
+  GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
+  const GskRoundedRect *outline = gsk_outset_shadow_node_get_outline (node);
+  float x = node->bounds.origin.x;
+  float y = node->bounds.origin.y;
+  float w = node->bounds.size.width;
+  float h = node->bounds.size.height;
+  float spread = gsk_outset_shadow_node_get_spread (node);
+  float dx = gsk_outset_shadow_node_get_dx (node);
+  float dy = gsk_outset_shadow_node_get_dy (node);
+  const float edge_sizes[] = { // Top, right, bottom, left
+    spread - dy, spread + dx, spread + dy, spread - dx
+  };
+  const float corner_sizes[][2] = { // top left, top right, bottom right, bottom left
+    { outline->corner[0].width + spread - dx, outline->corner[0].height + spread - dy },
+    { outline->corner[1].width + spread + dx, outline->corner[1].height + spread - dy },
+    { outline->corner[2].width + spread + dx, outline->corner[2].height + spread + dy },
+    { outline->corner[3].width + spread - dx, outline->corner[3].height + spread + dy },
+  };
+
+  gsk_gl_program_begin_draw (job->driver->unblurred_outset_shadow,
+                             &job->viewport,
+                             &job->projection,
+                             &modelview->matrix,
+                             gsk_gl_render_job_get_clip (job));
+  gsk_gl_program_set_uniform_rounded_rect (job->driver->unblurred_outset_shadow,
+                                           UNIFORM_UNBLURRED_OUTSET_SHADOW_OUTLINE_RECT,
+                                           outline);
+  gsk_gl_program_set_uniform_color (job->driver->unblurred_outset_shadow,
+                                    UNIFORM_UNBLURRED_OUTSET_SHADOW_COLOR,
+                                    gsk_outset_shadow_node_get_color (node));
+  gsk_gl_program_set_uniform1f (job->driver->unblurred_outset_shadow,
+                                UNIFORM_UNBLURRED_OUTSET_SHADOW_SPREAD,
+                                spread);
+  gsk_gl_program_set_uniform2f (job->driver->unblurred_outset_shadow,
+                                UNIFORM_UNBLURRED_OUTSET_SHADOW_OFFSET,
+                                dx, dy);
+
+  /* Corners... */
+  if (corner_sizes[0][0] > 0 && corner_sizes[0][1] > 0) /* Top left */
+    gsk_gl_render_job_draw (job,
+                            x, y,
+                            corner_sizes[0][0], corner_sizes[0][1]);
+  if (corner_sizes[1][0] > 0 && corner_sizes[1][1] > 0) /* Top right */
+    gsk_gl_render_job_draw (job,
+                            x + w - corner_sizes[1][0], y,
+                            corner_sizes[1][0], corner_sizes[1][1]);
+  if (corner_sizes[2][0] > 0 && corner_sizes[2][1] > 0) /* Bottom right */
+    gsk_gl_render_job_draw (job,
+                            x + w - corner_sizes[2][0], y + h - corner_sizes[2][1],
+                            corner_sizes[2][0], corner_sizes[2][1]);
+  if (corner_sizes[3][0] > 0 && corner_sizes[3][1] > 0) /* Bottom left */
+    gsk_gl_render_job_draw (job,
+                            x, y + h - corner_sizes[3][1],
+                            corner_sizes[3][0], corner_sizes[3][1]);
+  /* Edges... */;
+  if (edge_sizes[0] > 0) /* Top */
+    gsk_gl_render_job_draw (job,
+                            x + corner_sizes[0][0], y,
+                            w - corner_sizes[0][0] - corner_sizes[1][0], edge_sizes[0]);
+  if (edge_sizes[1] > 0) /* Right */
+    gsk_gl_render_job_draw (job,
+                            x + w - edge_sizes[1], y + corner_sizes[1][1],
+                            edge_sizes[1], h - corner_sizes[1][1] - corner_sizes[2][1]);
+  if (edge_sizes[2] > 0) /* Bottom */
+    gsk_gl_render_job_draw (job,
+                            x + corner_sizes[3][0], y + h - edge_sizes[2],
+                            w - corner_sizes[3][0] - corner_sizes[2][0], edge_sizes[2]);
+  if (edge_sizes[3] > 0) /* Left */
+    gsk_gl_render_job_draw (job,
+                            x, y + corner_sizes[0][1],
+                            edge_sizes[3], h - corner_sizes[0][1] - corner_sizes[3][1]);
+
+  gsk_gl_program_end_draw (job->driver->unblurred_outset_shadow);
+}
+
+static void
+gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
+                                                    GskRenderNode  *node)
+{
+  g_warning ("TODO: blurred outset shadow");
+}
+
+static void
 gsk_gl_render_job_visit_node (GskGLRenderJob *job,
                               GskRenderNode  *node)
 {
@@ -1317,6 +1403,13 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
         gsk_gl_render_job_visit_unblurred_inset_shadow_node (job, node);
     break;
 
+    case GSK_OUTSET_SHADOW_NODE:
+      if (gsk_outset_shadow_node_get_blur_radius (node) > 0)
+        gsk_gl_render_job_visit_blurred_outset_shadow_node (job, node);
+      else
+        gsk_gl_render_job_visit_unblurred_outset_shadow_node (job, node);
+    break;
+
     case GSK_BLEND_NODE:
     case GSK_BLUR_NODE:
     case GSK_CAIRO_NODE:
@@ -1325,7 +1418,6 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
     case GSK_CROSS_FADE_NODE:
     case GSK_GL_SHADER_NODE:
     case GSK_OPACITY_NODE:
-    case GSK_OUTSET_SHADOW_NODE:
     case GSK_RADIAL_GRADIENT_NODE:
     case GSK_REPEATING_LINEAR_GRADIENT_NODE:
     case GSK_REPEATING_RADIAL_GRADIENT_NODE:
