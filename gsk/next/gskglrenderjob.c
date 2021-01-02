@@ -1159,6 +1159,41 @@ gsk_gl_render_job_visit_transform_node (GskGLRenderJob *job,
 }
 
 static void
+gsk_gl_render_job_visit_unblurred_inset_shadow_node (GskGLRenderJob *job,
+                                                     GskRenderNode  *node)
+{
+  GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
+
+  gsk_gl_program_begin_draw (job->driver->inset_shadow,
+                             &job->viewport,
+                             &job->projection,
+                             &modelview->matrix,
+                             gsk_gl_render_job_get_clip (job));
+  gsk_gl_program_set_uniform_rounded_rect (job->driver->inset_shadow,
+                                           UNIFORM_INSET_SHADOW_OUTLINE_RECT,
+                                           gsk_inset_shadow_node_get_outline (node));
+  gsk_gl_program_set_uniform_color (job->driver->inset_shadow,
+                                    UNIFORM_INSET_SHADOW_COLOR,
+                                    gsk_inset_shadow_node_get_color (node));
+  gsk_gl_program_set_uniform1f (job->driver->inset_shadow,
+                                UNIFORM_INSET_SHADOW_SPREAD,
+                                gsk_inset_shadow_node_get_spread (node));
+  gsk_gl_program_set_uniform2f (job->driver->inset_shadow,
+                                UNIFORM_INSET_SHADOW_OFFSET,
+                                gsk_inset_shadow_node_get_dx (node),
+                                gsk_inset_shadow_node_get_dy (node));
+  gsk_gl_render_job_draw_rect (job, &node->bounds);
+  gsk_gl_program_end_draw (job->driver->inset_shadow);
+}
+
+static void
+gsk_gl_render_job_visit_blurred_inset_shadow_node (GskGLRenderJob *job,
+                                                   GskRenderNode  *node)
+{
+  g_warning ("TODO: blurred inset shadow");
+}
+
+static void
 gsk_gl_render_job_visit_node (GskGLRenderJob *job,
                               GskRenderNode  *node)
 {
@@ -1229,6 +1264,13 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
         gsk_gl_render_job_visit_border_node (job, node);
     break;
 
+    case GSK_INSET_SHADOW_NODE:
+      if (gsk_inset_shadow_node_get_blur_radius (node) > 0)
+        gsk_gl_render_job_visit_blurred_inset_shadow_node (job, node);
+      else
+        gsk_gl_render_job_visit_unblurred_inset_shadow_node (job, node);
+    break;
+
     case GSK_BLEND_NODE:
     case GSK_BLUR_NODE:
     case GSK_CAIRO_NODE:
@@ -1236,7 +1278,6 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
     case GSK_CONIC_GRADIENT_NODE:
     case GSK_CROSS_FADE_NODE:
     case GSK_GL_SHADER_NODE:
-    case GSK_INSET_SHADOW_NODE:
     case GSK_OPACITY_NODE:
     case GSK_OUTSET_SHADOW_NODE:
     case GSK_RADIAL_GRADIENT_NODE:
