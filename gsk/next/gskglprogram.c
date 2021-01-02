@@ -166,6 +166,9 @@ gsk_gl_program_begin_draw (GskGLProgram            *self,
 {
   g_assert (GSK_IS_GL_PROGRAM (self));
   g_assert (viewport != NULL);
+  g_assert (projection != NULL);
+  g_assert (modelview != NULL);
+  g_assert (clip != NULL);
 
   if (self->viewport_location > -1)
     gsk_gl_command_queue_set_uniform4f (self->command_queue,
@@ -188,11 +191,22 @@ gsk_gl_program_begin_draw (GskGLProgram            *self,
                                              self->projection_location,
                                              projection);
 
-  if (clip != NULL && self->clip_rect_location > -1)
-    gsk_gl_command_queue_set_uniform_rounded_rect (self->command_queue,
-                                                   self->id,
-                                                   self->clip_rect_location,
-                                                   clip);
+  if (self->clip_rect_location > -1)
+    {
+      if (clip != NULL)
+        gsk_gl_command_queue_set_uniform_rounded_rect (self->command_queue,
+                                                       self->id,
+                                                       self->clip_rect_location,
+                                                       clip);
+      else
+        gsk_gl_command_queue_set_uniform_rounded_rect (self->command_queue,
+                                                       self->id,
+                                                       self->clip_rect_location,
+                                                       &GSK_ROUNDED_RECT_INIT (0,
+                                                                               0,
+                                                                               viewport->size.width,
+                                                                               viewport->size.height));
+    }
 
   gsk_gl_command_queue_begin_draw (self->command_queue, self->id, viewport);
 }
