@@ -1342,12 +1342,9 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
     {
     case GSK_CONTAINER_NODE:
       {
-        guint i;
-        guint p;
+        guint n_children = gsk_container_node_get_n_children (node);
 
-        for (i = 0, p = gsk_container_node_get_n_children (node);
-             i < p;
-             i ++)
+        for (guint i = 0; i < n_children; i++)
           {
             GskRenderNode *child = gsk_container_node_get_child (node, i);
             gsk_gl_render_job_visit_node (job, child);
