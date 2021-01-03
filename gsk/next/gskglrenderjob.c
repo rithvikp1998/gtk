@@ -70,6 +70,7 @@ struct _GskGLRenderJob
   graphene_matrix_t  projection;
   GArray            *modelview;
   GArray            *clip;
+  float              alpha;
   float              offset_x;
   float              offset_y;
   float              scale_x;
@@ -547,6 +548,7 @@ gsk_gl_render_job_new (GskNextDriver         *driver,
   job->viewport = *viewport;
   job->region = region ? cairo_region_copy (region) : NULL;
   job->flip_y = !!flip_y;
+  job->alpha = 1.0;
 
   init_projection_matrix (&job->projection, viewport, flip_y);
   gsk_gl_render_job_set_modelview (job, gsk_transform_scale (NULL, scale_factor, scale_factor));
@@ -717,7 +719,8 @@ gsk_gl_render_job_visit_color_node (GskGLRenderJob *job,
                              &job->viewport,
                              &job->projection,
                              &modelview->matrix,
-                             gsk_gl_render_job_get_clip (job));
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
   gsk_gl_program_set_uniform_color (job->driver->color,
                                     UNIFORM_COLOR_COLOR,
                                     gsk_color_node_get_color (node));
@@ -741,7 +744,8 @@ gsk_gl_render_job_visit_linear_gradient_node (GskGLRenderJob *job,
                              &job->viewport,
                              &job->projection,
                              &modelview->matrix,
-                             gsk_gl_render_job_get_clip (job));
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
   gsk_gl_program_set_uniform1i (job->driver->linear_gradient,
                                 UNIFORM_LINEAR_GRADIENT_NUM_COLOR_STOPS,
                                 n_color_stops);
@@ -775,7 +779,8 @@ gsk_gl_render_job_visit_conic_gradient_node (GskGLRenderJob *job,
                              &job->viewport,
                              &job->projection,
                              &modelview->matrix,
-                             gsk_gl_render_job_get_clip (job));
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
   gsk_gl_program_set_uniform1i (job->driver->conic_gradient,
                                 UNIFORM_CONIC_GRADIENT_NUM_COLOR_STOPS,
                                 n_color_stops);
@@ -848,7 +853,8 @@ gsk_gl_render_job_visit_clipped_child (GskGLRenderJob       *job,
                                  &job->viewport,
                                  &job->projection,
                                  &modelview->matrix,
-                                 &clip->bounds);
+                                 &clip->bounds,
+                                 job->alpha);
       gsk_gl_program_set_uniform_texture (job->driver->blit,
                                           UNIFORM_SHARED_SOURCE,
                                           GL_TEXTURE_2D,
@@ -1026,7 +1032,8 @@ gsk_gl_render_job_visit_uniform_border_node (GskGLRenderJob *job,
                              &job->viewport,
                              &job->projection,
                              &modelview->matrix,
-                             gsk_gl_render_job_get_clip (job));
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
   gsk_gl_program_set_uniform_rounded_rect (job->driver->inset_shadow,
                                            UNIFORM_INSET_SHADOW_OUTLINE_RECT,
                                            rounded_outline);
@@ -1175,7 +1182,8 @@ gsk_gl_render_job_visit_border_node (GskGLRenderJob *job,
                                    &job->viewport,
                                    &job->projection,
                                    &modelview->matrix,
-                                   gsk_gl_render_job_get_clip (job));
+                                   gsk_gl_render_job_get_clip (job),
+                                   job->alpha);
         gsk_gl_program_set_uniform4fv (job->driver->border,
                                        UNIFORM_BORDER_COLOR,
                                        1,
@@ -1242,7 +1250,8 @@ gsk_gl_render_job_visit_unblurred_inset_shadow_node (GskGLRenderJob *job,
                              &job->viewport,
                              &job->projection,
                              &modelview->matrix,
-                             gsk_gl_render_job_get_clip (job));
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
   gsk_gl_program_set_uniform_rounded_rect (job->driver->inset_shadow,
                                            UNIFORM_INSET_SHADOW_OUTLINE_RECT,
                                            gsk_inset_shadow_node_get_outline (node));
@@ -1294,7 +1303,8 @@ gsk_gl_render_job_visit_unblurred_outset_shadow_node (GskGLRenderJob *job,
                              &job->viewport,
                              &job->projection,
                              &modelview->matrix,
-                             gsk_gl_render_job_get_clip (job));
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
   gsk_gl_program_set_uniform_rounded_rect (job->driver->unblurred_outset_shadow,
                                            UNIFORM_UNBLURRED_OUTSET_SHADOW_OUTLINE_RECT,
                                            outline);

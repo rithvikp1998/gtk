@@ -42,6 +42,7 @@ struct _GskGLProgram
   int                modelview_location;
   int                viewport_location;
   int                clip_rect_location;
+  int                alpha_location;
 };
 
 GskGLProgram *gsk_gl_program_new         (GskGLCommandQueue       *command_queue,
@@ -55,7 +56,8 @@ void          gsk_gl_program_begin_draw  (GskGLProgram            *self,
                                           const graphene_rect_t   *viewport,
                                           const graphene_matrix_t *projection,
                                           const graphene_matrix_t *modelview,
-                                          const GskRoundedRect    *clip);
+                                          const GskRoundedRect    *clip,
+                                          float                    alpha);
 void          gsk_gl_program_end_draw    (GskGLProgram            *self);
 
 static inline int

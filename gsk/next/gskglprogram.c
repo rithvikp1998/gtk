@@ -78,6 +78,7 @@ gsk_gl_program_init (GskGLProgram *self)
   self->projection_location = -1;
   self->modelview_location = -1;
   self->clip_rect_location = -1;
+  self->alpha_location = -1;
 }
 
 /**
@@ -134,6 +135,8 @@ gsk_gl_program_add_uniform (GskGLProgram *self,
     self->viewport_location = location;
   else if (key == UNIFORM_SHARED_CLIP_RECT)
     self->clip_rect_location = location;
+  else if (key == UNIFORM_SHARED_ALPHA)
+    self->alpha_location = location;
 
   return TRUE;
 }
@@ -162,7 +165,8 @@ gsk_gl_program_begin_draw (GskGLProgram            *self,
                            const graphene_rect_t   *viewport,
                            const graphene_matrix_t *projection,
                            const graphene_matrix_t *modelview,
-                           const GskRoundedRect    *clip)
+                           const GskRoundedRect    *clip,
+                           float                    alpha)
 {
   g_assert (GSK_IS_GL_PROGRAM (self));
   g_assert (viewport != NULL);
@@ -207,6 +211,12 @@ gsk_gl_program_begin_draw (GskGLProgram            *self,
                                                                                viewport->size.width,
                                                                                viewport->size.height));
     }
+
+  if (self->alpha_location > -1)
+    gsk_gl_command_queue_set_uniform1f (self->command_queue,
+                                        self->id,
+                                        self->alpha_location,
+                                        alpha);
 
   gsk_gl_command_queue_begin_draw (self->command_queue, self->id, viewport);
 }
