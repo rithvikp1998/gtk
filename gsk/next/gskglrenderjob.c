@@ -285,6 +285,16 @@ init_projection_matrix (graphene_matrix_t     *projection,
     graphene_matrix_scale (projection, 1, -1, 1);
 }
 
+static inline graphene_matrix_t *
+gsk_gl_render_job_get_modelview_matrix (GskGLRenderJob *job)
+{
+  g_assert (job->modelview->len > 0);
+
+  return &g_array_index (job->modelview,
+                         GskGLRenderModelview,
+                         job->modelview->len - 1).matrix;
+}
+
 static inline GskGLRenderModelview *
 gsk_gl_render_job_get_modelview (GskGLRenderJob *job)
 {
@@ -730,12 +740,10 @@ static void
 gsk_gl_render_job_visit_color_node (GskGLRenderJob *job,
                                     GskRenderNode  *node)
 {
-  GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
-
   gsk_gl_program_begin_draw (job->driver->color,
                              &job->viewport,
                              &job->projection,
-                             &modelview->matrix,
+                             gsk_gl_render_job_get_modelview_matrix (job),
                              gsk_gl_render_job_get_clip (job),
                              job->alpha);
   gsk_gl_program_set_uniform_color (job->driver->color,
@@ -749,7 +757,6 @@ static void
 gsk_gl_render_job_visit_linear_gradient_node (GskGLRenderJob *job,
                                               GskRenderNode  *node)
 {
-  GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
   const GskColorStop *stops = gsk_linear_gradient_node_get_color_stops (node, NULL);
   const graphene_point_t *start = gsk_linear_gradient_node_get_start (node);
   const graphene_point_t *end = gsk_linear_gradient_node_get_end (node);
@@ -760,7 +767,7 @@ gsk_gl_render_job_visit_linear_gradient_node (GskGLRenderJob *job,
   gsk_gl_program_begin_draw (job->driver->linear_gradient,
                              &job->viewport,
                              &job->projection,
-                             &modelview->matrix,
+                             gsk_gl_render_job_get_modelview_matrix (job),
                              gsk_gl_render_job_get_clip (job),
                              job->alpha);
   gsk_gl_program_set_uniform1i (job->driver->linear_gradient,
@@ -784,7 +791,6 @@ static void
 gsk_gl_render_job_visit_conic_gradient_node (GskGLRenderJob *job,
                                              GskRenderNode  *node)
 {
-  GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
   const GskColorStop *stops = gsk_conic_gradient_node_get_color_stops (node, NULL);
   const graphene_point_t *center = gsk_conic_gradient_node_get_center (node);
   float rotation = gsk_conic_gradient_node_get_rotation (node);
@@ -795,7 +801,7 @@ gsk_gl_render_job_visit_conic_gradient_node (GskGLRenderJob *job,
   gsk_gl_program_begin_draw (job->driver->conic_gradient,
                              &job->viewport,
                              &job->projection,
-                             &modelview->matrix,
+                             gsk_gl_render_job_get_modelview_matrix (job),
                              gsk_gl_render_job_get_clip (job),
                              job->alpha);
   gsk_gl_program_set_uniform1i (job->driver->conic_gradient,
@@ -869,7 +875,7 @@ gsk_gl_render_job_visit_clipped_child (GskGLRenderJob       *job,
       gsk_gl_program_begin_draw (job->driver->blit,
                                  &job->viewport,
                                  &job->projection,
-                                 &modelview->matrix,
+                                 gsk_gl_render_job_get_modelview_matrix (job),
                                  &clip->bounds,
                                  job->alpha);
       gsk_gl_program_set_uniform_texture (job->driver->blit,
@@ -1040,7 +1046,6 @@ static void
 gsk_gl_render_job_visit_uniform_border_node (GskGLRenderJob *job,
                                              GskRenderNode  *node)
 {
-  GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
   const GskRoundedRect *rounded_outline = gsk_border_node_get_outline (node);
   const GdkRGBA *colors = gsk_border_node_get_colors (node);
   const float *widths = gsk_border_node_get_widths (node);
@@ -1048,7 +1053,7 @@ gsk_gl_render_job_visit_uniform_border_node (GskGLRenderJob *job,
   gsk_gl_program_begin_draw (job->driver->inset_shadow,
                              &job->viewport,
                              &job->projection,
-                             &modelview->matrix,
+                             gsk_gl_render_job_get_modelview_matrix (job),
                              gsk_gl_render_job_get_clip (job),
                              job->alpha);
   gsk_gl_program_set_uniform_rounded_rect (job->driver->inset_shadow,
@@ -1071,7 +1076,6 @@ static void
 gsk_gl_render_job_visit_border_node (GskGLRenderJob *job,
                                      GskRenderNode  *node)
 {
-  GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
   const GskRoundedRect *rounded_outline = gsk_border_node_get_outline (node);
   const GdkRGBA *colors = gsk_border_node_get_colors (node);
   const float *widths = gsk_border_node_get_widths (node);
@@ -1198,7 +1202,7 @@ gsk_gl_render_job_visit_border_node (GskGLRenderJob *job,
         gsk_gl_program_begin_draw (job->driver->border,
                                    &job->viewport,
                                    &job->projection,
-                                   &modelview->matrix,
+                                   gsk_gl_render_job_get_modelview_matrix (job),
                                    gsk_gl_render_job_get_clip (job),
                                    job->alpha);
         gsk_gl_program_set_uniform4fv (job->driver->border,
@@ -1261,12 +1265,10 @@ static void
 gsk_gl_render_job_visit_unblurred_inset_shadow_node (GskGLRenderJob *job,
                                                      GskRenderNode  *node)
 {
-  GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
-
   gsk_gl_program_begin_draw (job->driver->inset_shadow,
                              &job->viewport,
                              &job->projection,
-                             &modelview->matrix,
+                             gsk_gl_render_job_get_modelview_matrix (job),
                              gsk_gl_render_job_get_clip (job),
                              job->alpha);
   gsk_gl_program_set_uniform_rounded_rect (job->driver->inset_shadow,
@@ -1297,7 +1299,6 @@ static void
 gsk_gl_render_job_visit_unblurred_outset_shadow_node (GskGLRenderJob *job,
                                                       GskRenderNode  *node)
 {
-  GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
   const GskRoundedRect *outline = gsk_outset_shadow_node_get_outline (node);
   float x = node->bounds.origin.x;
   float y = node->bounds.origin.y;
@@ -1319,7 +1320,7 @@ gsk_gl_render_job_visit_unblurred_outset_shadow_node (GskGLRenderJob *job,
   gsk_gl_program_begin_draw (job->driver->unblurred_outset_shadow,
                              &job->viewport,
                              &job->projection,
-                             &modelview->matrix,
+                             gsk_gl_render_job_get_modelview_matrix (job),
                              gsk_gl_render_job_get_clip (job),
                              job->alpha);
   gsk_gl_program_set_uniform_rounded_rect (job->driver->unblurred_outset_shadow,
@@ -1399,7 +1400,6 @@ static void
 gsk_gl_render_job_visit_cross_fade_node (GskGLRenderJob *job,
                                          GskRenderNode  *node)
 {
-  GskGLRenderModelview *modelview;
   GskRenderNode *start_node = gsk_cross_fade_node_get_start_child (node);
   GskRenderNode *end_node = gsk_cross_fade_node_get_end_child (node);
   float progress = gsk_cross_fade_node_get_progress (node);
@@ -1431,12 +1431,10 @@ gsk_gl_render_job_visit_cross_fade_node (GskGLRenderJob *job,
       return;
     }
 
-  modelview = gsk_gl_render_job_get_modelview (job);
-
   gsk_gl_program_begin_draw (job->driver->cross_fade,
                              &job->viewport,
                              &job->projection,
-                             &modelview->matrix,
+                             gsk_gl_render_job_get_modelview_matrix (job),
                              gsk_gl_render_job_get_clip (job),
                              job->alpha);
   gsk_gl_program_set_uniform_texture (job->driver->cross_fade,
