@@ -106,6 +106,8 @@ typedef struct _GskGLRenderOffscreen
   guint reset_clip : 1;
   guint do_not_cache : 1;
   guint linear_filter : 1;
+  guint flip_y : 1;
+  guint autorelease : 1;
 } GskGLRenderOffscreen;
 
 static void     gsk_gl_render_job_visit_node       (GskGLRenderJob       *job,
@@ -728,6 +730,52 @@ gsk_gl_render_job_draw (GskGLRenderJob *job,
   vertices[5].position[1] = min_y;
   vertices[5].uv[0] = 1;
   vertices[5].uv[1] = 0;
+}
+
+static void
+gsk_gl_render_job_draw_from_offscreen (GskGLRenderJob        *job,
+                                       const graphene_rect_t *bounds,
+                                       GskGLRenderOffscreen  *offscreen)
+{
+  GskGLDrawVertex *vertices;
+  float min_x = job->offset_x + bounds->origin.x;
+  float min_y = job->offset_y + bounds->origin.y;
+  float max_x = min_x + bounds->size.width;
+  float max_y = min_y + bounds->size.height;
+  float y1 = offscreen->flip_y ? offscreen->y2 : offscreen->y;
+  float y2 = offscreen->flip_y ? offscreen->y  : offscreen->y2;
+
+  vertices = gsk_gl_command_queue_add_vertices (job->command_queue, NULL);
+
+  vertices[0].position[0] = min_x;
+  vertices[0].position[1] = min_y;
+  vertices[0].uv[0] = offscreen->x;
+  vertices[0].uv[1] = y1;
+
+  vertices[1].position[0] = min_x;
+  vertices[1].position[1] = max_y;
+  vertices[1].uv[0] = offscreen->x;
+  vertices[1].uv[1] = y2;
+
+  vertices[2].position[0] = max_x;
+  vertices[2].position[1] = min_y;
+  vertices[2].uv[0] = offscreen->x2;
+  vertices[2].uv[1] = y1;
+
+  vertices[3].position[0] = max_x;
+  vertices[3].position[1] = max_y;
+  vertices[3].uv[0] = offscreen->x2;
+  vertices[3].uv[1] = y2;
+
+  vertices[4].position[0] = min_x;
+  vertices[4].position[1] = max_y;
+  vertices[4].uv[0] = offscreen->x;
+  vertices[4].uv[1] = y2;
+
+  vertices[5].position[0] = max_x;
+  vertices[5].position[1] = min_y;
+  vertices[5].uv[0] = offscreen->x2;
+  vertices[5].uv[1] = y1;
 }
 
 static void
@@ -1412,10 +1460,12 @@ gsk_gl_render_job_visit_cross_fade_node (GskGLRenderJob *job,
   offscreen_start.force_offscreen = TRUE;
   offscreen_start.reset_clip = TRUE;
   offscreen_start.bounds = &node->bounds;
+  offscreen_start.autorelease = TRUE;
 
   offscreen_end.force_offscreen = TRUE;
   offscreen_end.reset_clip = TRUE;
   offscreen_end.bounds = &node->bounds;
+  offscreen_end.autorelease = TRUE;
 
   if (!gsk_gl_render_job_render_offscreen (job, start_node, &offscreen_start))
     {
