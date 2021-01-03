@@ -1380,6 +1380,81 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
   g_warning ("TODO: blurred outset shadow");
 }
 
+static inline bool G_GNUC_PURE
+equal_texture_nodes (GskRenderNode *node1,
+                     GskRenderNode *node2)
+{
+  if (gsk_render_node_get_node_type (node1) != GSK_TEXTURE_NODE ||
+      gsk_render_node_get_node_type (node2) != GSK_TEXTURE_NODE)
+    return false;
+
+  if (gsk_texture_node_get_texture (node1) !=
+      gsk_texture_node_get_texture (node2))
+    return false;
+
+  return graphene_rect_equal (&node1->bounds, &node2->bounds);
+}
+
+static void
+gsk_gl_render_job_visit_cross_fade_node (GskGLRenderJob *job,
+                                         GskRenderNode  *node)
+{
+  GskGLRenderModelview *modelview;
+  GskRenderNode *start_node = gsk_cross_fade_node_get_start_child (node);
+  GskRenderNode *end_node = gsk_cross_fade_node_get_end_child (node);
+  float progress = gsk_cross_fade_node_get_progress (node);
+  GskGLRenderOffscreen offscreen_start = {0};
+  GskGLRenderOffscreen offscreen_end = {0};
+
+  g_assert (progress > 0.0);
+  g_assert (progress < 1.0);
+
+  offscreen_start.force_offscreen = TRUE;
+  offscreen_start.reset_clip = TRUE;
+  offscreen_start.bounds = &node->bounds;
+
+  offscreen_end.force_offscreen = TRUE;
+  offscreen_end.reset_clip = TRUE;
+  offscreen_end.bounds = &node->bounds;
+
+  if (!gsk_gl_render_job_render_offscreen (job, start_node, &offscreen_start))
+    {
+      gsk_gl_render_job_visit_node (job, end_node);
+      return;
+    }
+
+  if (!gsk_gl_render_job_render_offscreen (job, end_node, &offscreen_end))
+    {
+      float prev_alpha = job->alpha;
+      gsk_gl_render_job_visit_node (job, start_node);
+      job->alpha = prev_alpha;
+      return;
+    }
+
+  modelview = gsk_gl_render_job_get_modelview (job);
+
+  gsk_gl_program_begin_draw (job->driver->cross_fade,
+                             &job->viewport,
+                             &job->projection,
+                             &modelview->matrix,
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
+  gsk_gl_program_set_uniform_texture (job->driver->cross_fade,
+                                      UNIFORM_SHARED_SOURCE,
+                                      GL_TEXTURE_2D,
+                                      GL_TEXTURE0,
+                                      offscreen_start.texture_id);
+  gsk_gl_program_set_uniform_texture (job->driver->cross_fade,
+                                      UNIFORM_CROSS_FADE_SOURCE2,
+                                      GL_TEXTURE_2D,
+                                      GL_TEXTURE1,
+                                      offscreen_end.texture_id);
+  gsk_gl_program_set_uniform1i (job->driver->cross_fade,
+                                UNIFORM_CROSS_FADE_PROGRESS,
+                                gsk_cross_fade_node_get_progress (node));
+  gsk_gl_program_end_draw (job->driver->cross_fade);
+}
+
 static void
 gsk_gl_render_job_visit_node (GskGLRenderJob *job,
                               GskRenderNode  *node)
@@ -1472,11 +1547,25 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
         gsk_gl_render_job_visit_as_fallback (job, node);
     break;
 
+    case GSK_CROSS_FADE_NODE:
+      {
+        GskRenderNode *start_node = gsk_cross_fade_node_get_start_child (node);
+        GskRenderNode *end_node = gsk_cross_fade_node_get_end_child (node);
+        float progress = gsk_cross_fade_node_get_progress (node);
+
+        if (progress <= 0)
+          gsk_gl_render_job_visit_node (job, gsk_cross_fade_node_get_start_child (node));
+        else if (progress >= 1 || equal_texture_nodes (start_node, end_node))
+          gsk_gl_render_job_visit_node (job, gsk_cross_fade_node_get_end_child (node));
+        else
+          gsk_gl_render_job_visit_cross_fade_node (job, node);
+      }
+    break;
+
     case GSK_BLEND_NODE:
     case GSK_BLUR_NODE:
     case GSK_CAIRO_NODE:
     case GSK_COLOR_MATRIX_NODE:
-    case GSK_CROSS_FADE_NODE:
     case GSK_GL_SHADER_NODE:
     case GSK_OPACITY_NODE:
     case GSK_RADIAL_GRADIENT_NODE:
