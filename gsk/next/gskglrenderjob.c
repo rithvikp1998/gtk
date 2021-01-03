@@ -94,8 +94,25 @@ typedef struct _GskGLRenderModelview
   graphene_matrix_t matrix;
 } GskGLRenderModelview;
 
-static void gsk_gl_render_job_visit_node (GskGLRenderJob *job,
-                                          GskRenderNode  *node);
+typedef struct _GskGLRenderOffscreen
+{
+  const graphene_rect_t *bounds;
+  guint texture_id;
+  float x;
+  float y;
+  float x2;
+  float y2;
+  guint force_offscreen : 1;
+  guint reset_clip : 1;
+  guint do_not_cache : 1;
+  guint linear_filter : 1;
+} GskGLRenderOffscreen;
+
+static void     gsk_gl_render_job_visit_node       (GskGLRenderJob       *job,
+                                                    GskRenderNode        *node);
+static gboolean gsk_gl_render_job_render_offscreen (GskGLRenderJob       *job,
+                                                    GskRenderNode        *node,
+                                                    GskGLRenderOffscreen *offscreen);
 
 static inline gboolean G_GNUC_PURE
 node_is_invisible (const GskRenderNode *node)
@@ -1476,6 +1493,18 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
       g_assert_not_reached ();
     break;
     }
+}
+
+static gboolean
+gsk_gl_render_job_render_offscreen (GskGLRenderJob       *job,
+                                    GskRenderNode        *node,
+                                    GskGLRenderOffscreen *offscreen)
+{
+  g_assert (job != NULL);
+  g_assert (node != NULL);
+  g_assert (offscreen != NULL);
+
+  return FALSE;
 }
 
 void
