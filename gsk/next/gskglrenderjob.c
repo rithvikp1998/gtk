@@ -1504,6 +1504,51 @@ gsk_gl_render_job_visit_cross_fade_node (GskGLRenderJob *job,
 }
 
 static void
+gsk_gl_render_job_visit_opacity_node (GskGLRenderJob *job,
+                                      GskRenderNode  *node)
+{
+  GskRenderNode *child = gsk_opacity_node_get_child (node);
+  float opacity = gsk_opacity_node_get_opacity (node);
+
+  if (gsk_render_node_get_node_type (child) == GSK_CONTAINER_NODE)
+    {
+      GskGLRenderOffscreen offscreen = {0};
+
+      /* The semantics of an opacity node mandate that when, e.g., two
+       * color nodes overlap, there may not be any blending between them.
+       */
+
+      offscreen.force_offscreen = TRUE;
+      offscreen.reset_clip = TRUE;
+      offscreen.autorelease = TRUE;
+
+      gsk_gl_render_job_render_offscreen (job, child, &offscreen);
+
+      gsk_gl_program_begin_draw (job->driver->blit,
+                                 &job->viewport,
+                                 &job->projection,
+                                 gsk_gl_render_job_get_modelview_matrix (job),
+                                 gsk_gl_render_job_get_clip (job),
+                                 job->alpha * opacity);
+      gsk_gl_program_set_uniform_texture (job->driver->blit,
+                                          UNIFORM_SHARED_SOURCE,
+                                          GL_TEXTURE_2D,
+                                          GL_TEXTURE0,
+                                          offscreen.texture_id);
+      gsk_gl_render_job_draw_from_offscreen (job, &node->bounds, &offscreen);
+      gsk_gl_program_end_draw (job->driver->blit);
+    }
+  else
+    {
+      float prev_alpha = job->alpha;
+
+      job->alpha = job->alpha * opacity;
+      gsk_gl_render_job_visit_node (job, child);
+      job->alpha = prev_alpha;
+    }
+}
+
+static void
 gsk_gl_render_job_visit_node (GskGLRenderJob *job,
                               GskRenderNode  *node)
 {
@@ -1610,12 +1655,15 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
       }
     break;
 
+    case GSK_OPACITY_NODE:
+      gsk_gl_render_job_visit_opacity_node (job, node);
+    break;
+
     case GSK_BLEND_NODE:
     case GSK_BLUR_NODE:
     case GSK_CAIRO_NODE:
     case GSK_COLOR_MATRIX_NODE:
     case GSK_GL_SHADER_NODE:
-    case GSK_OPACITY_NODE:
     case GSK_RADIAL_GRADIENT_NODE:
     case GSK_REPEATING_LINEAR_GRADIENT_NODE:
     case GSK_REPEATING_RADIAL_GRADIENT_NODE:
