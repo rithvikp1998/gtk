@@ -68,7 +68,9 @@ struct _GskNextDriver
   GskGLShadowLibrary *shadows;
 
   GHashTable *textures;
-  GHashTable *textures_by_key;
+
+  GHashTable *key_to_texture_id;
+  GHashTable *texture_id_to_key;
 
   GArray *autorelease_framebuffers;
   GArray *autorelease_textures;
@@ -81,7 +83,7 @@ struct _GskNextDriver
 #undef GSK_GL_ADD_UNIFORM
 #undef GSK_GL_DEFINE_PROGRAM
 
-  guint64 current_frame_id;
+  gint64 current_frame_id;
 
   guint debug : 1;
   guint in_frame : 1;

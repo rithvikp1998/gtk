@@ -34,6 +34,8 @@
 #include "gskglprogramprivate.h"
 #include "gskglshadowlibraryprivate.h"
 
+#define TEXTURES_CACHED_FOR_N_FRAMES 5
+
 G_DEFINE_TYPE (GskNextDriver, gsk_next_driver, G_TYPE_OBJECT)
 
 typedef struct _GskGLTexture
@@ -44,7 +46,7 @@ typedef struct _GskGLTexture
   GLuint      min_filter;
   GLuint      mag_filter;
   GdkTexture *user;
-  guint64     last_used_in_frame;
+  gint64      last_used_in_frame;
   guint       permanent : 1;
 } GskGLTexture;
 
@@ -86,6 +88,52 @@ gsk_gl_texture_free (gpointer data)
 }
 
 static void
+remove_texture_key_for_id (GskNextDriver *self,
+                           guint          texture_id)
+{
+  GskTextureKey *key;
+
+  g_assert (GSK_IS_NEXT_DRIVER (self));
+  g_assert (texture_id > 0);
+
+  if (g_hash_table_steal_extended (self->texture_id_to_key,
+                                   GUINT_TO_POINTER (texture_id),
+                                   NULL,
+                                   (gpointer *)&key))
+    g_hash_table_remove (self->key_to_texture_id, key);
+}
+
+static guint
+gsk_next_driver_collect_unused_textures (GskNextDriver *self,
+                                         gint64         watermark)
+{
+  GHashTableIter iter;
+  gpointer k, v;
+  guint old_size;
+
+  g_assert (GSK_IS_NEXT_DRIVER (self));
+
+  old_size = g_hash_table_size (self->textures);
+
+  g_hash_table_iter_init (&iter, self->textures);
+  while (g_hash_table_iter_next (&iter, &k, &v))
+    {
+      GskGLTexture *t = v;
+
+      if (t->user || t->permanent)
+        continue;
+
+      if (t->last_used_in_frame <= watermark)
+        {
+          remove_texture_key_for_id (self, t->texture_id);
+          g_hash_table_iter_remove (&iter);
+        }
+    }
+
+  return old_size - g_hash_table_size (self->textures);
+}
+
+static void
 gsk_next_driver_dispose (GObject *object)
 {
   GskNextDriver *self = (GskNextDriver *)object;
@@ -103,11 +151,22 @@ gsk_next_driver_dispose (GObject *object)
 #undef GSK_GL_ADD_UNIFORM
 #undef GSK_GL_DEFINE_PROGRAM
 
-  g_clear_object (&self->command_queue);
+  if (self->command_queue != NULL)
+    {
+      gsk_gl_command_queue_make_current (self->command_queue);
+      gsk_next_driver_collect_unused_textures (self, 0);
+      g_clear_object (&self->command_queue);
+    }
+
+  g_assert (self->autorelease_framebuffers->len == 0);
+  g_assert (self->autorelease_textures->len == 0);
+
   g_clear_pointer (&self->autorelease_framebuffers, g_array_unref);
   g_clear_pointer (&self->autorelease_textures, g_array_unref);
-  g_clear_pointer (&self->textures_by_key, g_hash_table_unref);
+  g_clear_pointer (&self->key_to_texture_id, g_hash_table_unref);
   g_clear_pointer (&self->textures, g_hash_table_unref);
+  g_clear_pointer (&self->key_to_texture_id, g_hash_table_unref);
+  g_clear_pointer (&self->texture_id_to_key, g_hash_table_unref);
 
   G_OBJECT_CLASS (gsk_next_driver_parent_class)->dispose (object);
 }
@@ -126,10 +185,11 @@ gsk_next_driver_init (GskNextDriver *self)
   self->autorelease_framebuffers = g_array_new (FALSE, FALSE, sizeof (guint));
   self->autorelease_textures = g_array_new (FALSE, FALSE, sizeof (guint));
   self->textures = g_hash_table_new_full (NULL, NULL, NULL, gsk_gl_texture_free);
-  self->textures_by_key = g_hash_table_new_full (texture_key_hash,
-                                                 texture_key_equal,
-                                                 g_free,
-                                                 NULL);
+  self->texture_id_to_key = g_hash_table_new (NULL, NULL);
+  self->key_to_texture_id = g_hash_table_new_full (texture_key_hash,
+                                                   texture_key_equal,
+                                                   g_free,
+                                                   NULL);
 }
 
 static gboolean
@@ -246,6 +306,13 @@ gsk_next_driver_begin_frame (GskNextDriver *self)
   gsk_gl_texture_library_begin_frame (GSK_GL_TEXTURE_LIBRARY (self->icons));
   gsk_gl_texture_library_begin_frame (GSK_GL_TEXTURE_LIBRARY (self->glyphs));
   gsk_gl_texture_library_begin_frame (GSK_GL_TEXTURE_LIBRARY (self->shadows));
+
+  /* We avoid collecting on every frame. To do so would accidentally
+   * drop some textures we want cached but fell out of the damage clip
+   * on this cycle through the rendering.
+   */
+  gsk_next_driver_collect_unused_textures (self,
+                                           self->current_frame_id - TEXTURES_CACHED_FOR_N_FRAMES);
 }
 
 void
@@ -333,7 +400,7 @@ gsk_next_driver_lookup_texture (GskNextDriver       *self,
   g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), FALSE);
   g_return_val_if_fail (key != NULL, FALSE);
 
-  if (g_hash_table_lookup_extended (self->textures_by_key, key, NULL, &id))
+  if (g_hash_table_lookup_extended (self->key_to_texture_id, key, NULL, &id))
     {
       GskGLTexture *texture;
 
@@ -358,11 +425,14 @@ gsk_next_driver_insert_texture (GskNextDriver       *self,
                                 const GskTextureKey *key,
                                 guint                texture_id)
 {
+  GskTextureKey *k;
+
   g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
   g_return_if_fail (key != NULL);
   g_return_if_fail (texture_id > 0);
 
-  g_hash_table_insert (self->textures_by_key,
-                       g_memdup (key, sizeof *key),
-                       GUINT_TO_POINTER (texture_id));
+  k = g_memdup (key, sizeof *key);
+
+  g_hash_table_insert (self->key_to_texture_id, k, GUINT_TO_POINTER (texture_id));
+  g_hash_table_insert (self->texture_id_to_key, GUINT_TO_POINTER (texture_id), k);
 }
