@@ -268,7 +268,7 @@ gsk_gl_renderer_render_texture (GskRenderer           *renderer,
                                              &texture_id))
     return NULL;
 
-  gsk_gl_command_queue_autorelease_framebuffer (self->command_queue, fbo_id);
+  gsk_next_driver_autorelease_framebuffer (self->driver, fbo_id);
 
   job = gsk_gl_render_job_new (self->driver, viewport, 1, NULL, fbo_id, TRUE);
   gsk_gl_render_job_render (job, root);

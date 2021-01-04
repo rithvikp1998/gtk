@@ -200,8 +200,6 @@ gsk_gl_command_queue_dispose (GObject *object)
   g_clear_pointer (&self->batch_binds, g_array_unref);
   g_clear_pointer (&self->batch_uniforms, g_array_unref);
   g_clear_pointer (&self->saved_state, g_ptr_array_unref);
-  g_clear_pointer (&self->autorelease_framebuffers, g_array_unref);
-  g_clear_pointer (&self->autorelease_textures, g_array_unref);
 
   G_OBJECT_CLASS (gsk_gl_command_queue_parent_class)->dispose (object);
 }
@@ -227,8 +225,6 @@ gsk_gl_command_queue_init (GskGLCommandQueue *self)
   self->vertices = gsk_gl_buffer_new (GL_ARRAY_BUFFER, sizeof (GskGLDrawVertex));
   self->uniforms = gsk_gl_uniform_state_new ();
   self->saved_state = g_ptr_array_new_with_free_func ((GDestroyNotify)gsk_gl_attachment_state_free);
-  self->autorelease_textures = g_array_new (FALSE, FALSE, sizeof (GLuint));
-  self->autorelease_framebuffers = g_array_new (FALSE, FALSE, sizeof (GLuint));
   self->debug_groups = g_string_chunk_new (4096);
 }
 
@@ -241,7 +237,7 @@ gsk_gl_command_queue_new (GdkGLContext *context)
 
   self = g_object_new (GSK_TYPE_GL_COMMAND_QUEUE, NULL);
   self->context = g_object_ref (context);
-  
+
   return g_steal_pointer (&self);
 }
 
@@ -348,7 +344,7 @@ gsk_gl_command_queue_end_draw (GskGLCommandQueue *self)
   g_return_if_fail (self->in_draw == TRUE);
 
   batch = &g_array_index (self->batches, GskGLCommandBatch, self->batches->len - 1);
-  
+
   g_assert (batch->any.kind == GSK_GL_COMMAND_KIND_DRAW);
 
   if G_UNLIKELY (batch->draw.vbo_count == 0)
@@ -790,24 +786,12 @@ gsk_gl_command_queue_end_frame (GskGLCommandQueue *self)
 
   gsk_gl_uniform_state_end_frame (self->uniforms);
 
-  /* Release autoreleased framebuffers */
-  if (self->autorelease_framebuffers->len > 0)
-    glDeleteFramebuffers (self->autorelease_framebuffers->len,
-                          (GLuint *)(gpointer)self->autorelease_framebuffers->data);
-
-  /* Release autoreleased textures */
-  if (self->autorelease_textures->len > 0)
-    glDeleteTextures (self->autorelease_textures->len,
-                      (GLuint *)(gpointer)self->autorelease_textures->data);
-
   g_string_chunk_clear (self->debug_groups);
 
   self->batches->len = 0;
   self->batch_draws->len = 0;
   self->batch_uniforms->len = 0;
   self->batch_binds->len = 0;
-  self->autorelease_framebuffers->len = 0;
-  self->autorelease_textures->len = 0;
   self->tail_batch_index = -1;
 }
 
@@ -851,26 +835,6 @@ gsk_gl_command_queue_create_render_target (GskGLCommandQueue *self,
   *out_texture_id = texture_id;
 
   return TRUE;
-}
-
-void
-gsk_gl_command_queue_autorelease_framebuffer (GskGLCommandQueue *self,
-                                              guint              framebuffer_id)
-{
-  g_return_if_fail (GSK_IS_GL_COMMAND_QUEUE (self));
-  g_return_if_fail (framebuffer_id > 0);
-
-  g_array_append_val (self->autorelease_framebuffers, framebuffer_id);
-}
-
-void
-gsk_gl_command_queue_autorelease_texture (GskGLCommandQueue *self,
-                                          guint              texture_id)
-{
-  g_return_if_fail (GSK_IS_GL_COMMAND_QUEUE (self));
-  g_return_if_fail (texture_id > 0);
-
-  g_array_append_val (self->autorelease_textures, texture_id);
 }
 
 int

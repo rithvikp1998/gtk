@@ -52,6 +52,8 @@ gsk_next_driver_dispose (GObject *object)
 #undef GSK_GL_DEFINE_PROGRAM
 
   g_clear_object (&self->command_queue);
+  g_clear_pointer (&self->autorelease_framebuffers, g_array_unref);
+  g_clear_pointer (&self->autorelease_textures, g_array_unref);
 
   G_OBJECT_CLASS (gsk_next_driver_parent_class)->dispose (object);
 }
@@ -67,6 +69,8 @@ gsk_next_driver_class_init (GskNextDriverClass *klass)
 static void
 gsk_next_driver_init (GskNextDriver *self)
 {
+  self->autorelease_framebuffers = g_array_new (FALSE, FALSE, sizeof (guint));
+  self->autorelease_textures = g_array_new (FALSE, FALSE, sizeof (guint));
 }
 
 static gboolean
@@ -196,6 +200,20 @@ gsk_next_driver_end_frame (GskNextDriver *self)
   gsk_gl_texture_library_end_frame (GSK_GL_TEXTURE_LIBRARY (self->glyphs));
   gsk_gl_texture_library_end_frame (GSK_GL_TEXTURE_LIBRARY (self->shadows));
 
+  if (self->autorelease_textures->len > 0)
+    {
+      glDeleteTextures (self->autorelease_textures->len,
+                        (GLuint *)(gpointer)self->autorelease_textures->data);
+      self->autorelease_textures->len = 0;
+    }
+
+  if (self->autorelease_framebuffers->len > 0)
+    {
+      glDeleteFramebuffers (self->autorelease_framebuffers->len,
+                            (GLuint *)(gpointer)self->autorelease_framebuffers->data);
+      self->autorelease_framebuffers->len = 0;
+    }
+
   self->in_frame = FALSE;
 }
 
@@ -225,4 +243,22 @@ gsk_next_driver_create_render_target (GskNextDriver *self,
                                                     height,
                                                     out_fbo_id,
                                                     out_texture_id);
+}
+
+void
+gsk_next_driver_autorelease_texture (GskNextDriver *self,
+                                     guint          texture_id)
+{
+  g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
+
+  g_array_append_val (self->autorelease_textures, texture_id);
+}
+
+void
+gsk_next_driver_autorelease_framebuffer (GskNextDriver *self,
+                                         guint          framebuffer_id)
+{
+  g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
+
+  g_array_append_val (self->autorelease_framebuffers, framebuffer_id);
 }

@@ -58,6 +58,9 @@ struct _GskNextDriver
   GskGLIconLibrary   *icons;
   GskGLShadowLibrary *shadows;
 
+  GArray *autorelease_framebuffers;
+  GArray *autorelease_textures;
+
 #define GSK_GL_NO_UNIFORMS
 #define GSK_GL_ADD_UNIFORM(pos, KEY, name)
 #define GSK_GL_DEFINE_PROGRAM(name, resource, uniforms) GskGLProgram *name;
@@ -70,17 +73,21 @@ struct _GskNextDriver
   guint in_frame : 1;
 };
 
-GskNextDriver *gsk_next_driver_new                  (GskGLCommandQueue  *command_queue,
-                                                     gboolean            debug,
-                                                     GError            **error);
-GdkGLContext  *gsk_next_driver_get_context          (GskNextDriver      *self);
-gboolean       gsk_next_driver_create_render_target (GskNextDriver      *self,
-                                                     int                 width,
-                                                     int                 height,
-                                                     guint              *out_fbo_id,
-                                                     guint              *out_texture_id);
-void           gsk_next_driver_begin_frame          (GskNextDriver      *driver);
-void           gsk_next_driver_end_frame            (GskNextDriver      *driver);
+GskNextDriver *gsk_next_driver_new                     (GskGLCommandQueue  *command_queue,
+                                                        gboolean            debug,
+                                                        GError            **error);
+GdkGLContext  *gsk_next_driver_get_context             (GskNextDriver      *self);
+gboolean       gsk_next_driver_create_render_target    (GskNextDriver      *self,
+                                                        int                 width,
+                                                        int                 height,
+                                                        guint              *out_fbo_id,
+                                                        guint              *out_texture_id);
+void           gsk_next_driver_begin_frame             (GskNextDriver      *self);
+void           gsk_next_driver_end_frame               (GskNextDriver      *self);
+void           gsk_next_driver_autorelease_framebuffer (GskNextDriver      *self,
+                                                        guint               framebuffer_id);
+void           gsk_next_driver_autorelease_texture     (GskNextDriver      *self,
+                                                        guint               texture_id);
 
 G_END_DECLS
 
