@@ -36,6 +36,55 @@
 
 G_DEFINE_TYPE (GskNextDriver, gsk_next_driver, G_TYPE_OBJECT)
 
+typedef struct _GskGLTexture
+{
+  GLuint      texture_id;
+  int         width;
+  int         height;
+  GLuint      min_filter;
+  GLuint      mag_filter;
+  GdkTexture *user;
+  guint64     last_used_in_frame;
+  guint       permanent : 1;
+} GskGLTexture;
+
+static guint
+texture_key_hash (gconstpointer v)
+{
+  const GskTextureKey *k = (const GskTextureKey *)v;
+
+  return GPOINTER_TO_UINT (k->pointer)
+         + (guint)(k->scale_x * 100)
+         + (guint)(k->scale_y * 100)
+         + (guint)k->filter * 2 +
+         + (guint)k->pointer_is_child;
+}
+
+static gboolean
+texture_key_equal (gconstpointer v1, gconstpointer v2)
+{
+  const GskTextureKey *k1 = (const GskTextureKey *)v1;
+  const GskTextureKey *k2 = (const GskTextureKey *)v2;
+
+  return k1->pointer == k2->pointer &&
+         k1->scale_x == k2->scale_x &&
+         k1->scale_y == k2->scale_y &&
+         k1->filter == k2->filter &&
+         k1->pointer_is_child == k2->pointer_is_child &&
+         (!k1->pointer_is_child || graphene_rect_equal (&k1->parent_rect, &k2->parent_rect));
+}
+
+static void
+gsk_gl_texture_free (gpointer data)
+{
+  GskGLTexture *texture = data;
+
+  if (texture != NULL)
+    {
+      g_slice_free (GskGLTexture, texture);
+    }
+}
+
 static void
 gsk_next_driver_dispose (GObject *object)
 {
@@ -57,6 +106,8 @@ gsk_next_driver_dispose (GObject *object)
   g_clear_object (&self->command_queue);
   g_clear_pointer (&self->autorelease_framebuffers, g_array_unref);
   g_clear_pointer (&self->autorelease_textures, g_array_unref);
+  g_clear_pointer (&self->textures_by_key, g_hash_table_unref);
+  g_clear_pointer (&self->textures, g_hash_table_unref);
 
   G_OBJECT_CLASS (gsk_next_driver_parent_class)->dispose (object);
 }
@@ -74,6 +125,11 @@ gsk_next_driver_init (GskNextDriver *self)
 {
   self->autorelease_framebuffers = g_array_new (FALSE, FALSE, sizeof (guint));
   self->autorelease_textures = g_array_new (FALSE, FALSE, sizeof (guint));
+  self->textures = g_hash_table_new_full (NULL, NULL, NULL, gsk_gl_texture_free);
+  self->textures_by_key = g_hash_table_new_full (texture_key_hash,
+                                                 texture_key_equal,
+                                                 g_free,
+                                                 NULL);
 }
 
 static gboolean
@@ -182,6 +238,7 @@ gsk_next_driver_begin_frame (GskNextDriver *self)
   g_return_if_fail (self->in_frame == FALSE);
 
   self->in_frame = TRUE;
+  self->current_frame_id++;
 
   gsk_gl_command_queue_make_current (self->command_queue);
   gsk_gl_command_queue_begin_frame (self->command_queue);
@@ -264,4 +321,48 @@ gsk_next_driver_autorelease_framebuffer (GskNextDriver *self,
   g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
 
   g_array_append_val (self->autorelease_framebuffers, framebuffer_id);
+}
+
+gboolean
+gsk_next_driver_lookup_texture (GskNextDriver       *self,
+                                const GskTextureKey *key,
+                                guint               *texture_id)
+{
+  gpointer id;
+
+  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), FALSE);
+  g_return_val_if_fail (key != NULL, FALSE);
+
+  if (g_hash_table_lookup_extended (self->textures_by_key, key, NULL, &id))
+    {
+      GskGLTexture *texture;
+
+      g_assert (id != NULL);
+
+      if (texture_id != NULL)
+        *texture_id = GPOINTER_TO_UINT (id);
+
+      texture = g_hash_table_lookup (self->textures, id);
+
+      if (texture != NULL)
+        texture->last_used_in_frame = self->current_frame_id;
+
+      return TRUE;
+    }
+
+  return FALSE;
+}
+
+void
+gsk_next_driver_insert_texture (GskNextDriver       *self,
+                                const GskTextureKey *key,
+                                guint                texture_id)
+{
+  g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
+  g_return_if_fail (key != NULL);
+  g_return_if_fail (texture_id > 0);
+
+  g_hash_table_insert (self->textures_by_key,
+                       g_memdup (key, sizeof *key),
+                       GUINT_TO_POINTER (texture_id));
 }

@@ -36,6 +36,15 @@ enum {
   UNIFORM_SHARED_LAST
 };
 
+typedef struct {
+  gpointer        pointer;
+  float           scale_x;
+  float           scale_y;
+  int             filter;
+  int             pointer_is_child;
+  graphene_rect_t parent_rect; /* Valid when pointer_is_child */
+} GskTextureKey;
+
 #define GSL_GK_NO_UNIFORMS UNIFORM_INVALID_##__COUNTER__
 #define GSK_GL_ADD_UNIFORM(pos, KEY, name) UNIFORM_##KEY = UNIFORM_SHARED_LAST + pos,
 #define GSK_GL_DEFINE_PROGRAM(name, resource, uniforms) enum { uniforms };
@@ -58,6 +67,9 @@ struct _GskNextDriver
   GskGLIconLibrary   *icons;
   GskGLShadowLibrary *shadows;
 
+  GHashTable *textures;
+  GHashTable *textures_by_key;
+
   GArray *autorelease_framebuffers;
   GArray *autorelease_textures;
 
@@ -69,25 +81,33 @@ struct _GskNextDriver
 #undef GSK_GL_ADD_UNIFORM
 #undef GSK_GL_DEFINE_PROGRAM
 
+  guint64 current_frame_id;
+
   guint debug : 1;
   guint in_frame : 1;
 };
 
-GskNextDriver *gsk_next_driver_new                     (GskGLCommandQueue  *command_queue,
-                                                        gboolean            debug,
-                                                        GError            **error);
-GdkGLContext  *gsk_next_driver_get_context             (GskNextDriver      *self);
-gboolean       gsk_next_driver_create_render_target    (GskNextDriver      *self,
-                                                        int                 width,
-                                                        int                 height,
-                                                        guint              *out_fbo_id,
-                                                        guint              *out_texture_id);
-void           gsk_next_driver_begin_frame             (GskNextDriver      *self);
-void           gsk_next_driver_end_frame               (GskNextDriver      *self);
-void           gsk_next_driver_autorelease_framebuffer (GskNextDriver      *self,
-                                                        guint               framebuffer_id);
-void           gsk_next_driver_autorelease_texture     (GskNextDriver      *self,
-                                                        guint               texture_id);
+GskNextDriver *gsk_next_driver_new                     (GskGLCommandQueue    *command_queue,
+                                                        gboolean              debug,
+                                                        GError              **error);
+GdkGLContext  *gsk_next_driver_get_context             (GskNextDriver        *self);
+gboolean       gsk_next_driver_create_render_target    (GskNextDriver        *self,
+                                                        int                   width,
+                                                        int                   height,
+                                                        guint                *out_fbo_id,
+                                                        guint                *out_texture_id);
+void           gsk_next_driver_begin_frame             (GskNextDriver        *self);
+void           gsk_next_driver_end_frame               (GskNextDriver        *self);
+void           gsk_next_driver_autorelease_framebuffer (GskNextDriver        *self,
+                                                        guint                 framebuffer_id);
+void           gsk_next_driver_autorelease_texture     (GskNextDriver        *self,
+                                                        guint                 texture_id);
+gboolean       gsk_next_driver_lookup_texture          (GskNextDriver        *self,
+                                                        const GskTextureKey  *key,
+                                                        guint                *texture_id);
+void           gsk_next_driver_insert_texture          (GskNextDriver        *self,
+                                                        const GskTextureKey  *key,
+                                                        guint                 texture_id);
 
 G_END_DECLS
 
