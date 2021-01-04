@@ -1,5 +1,8 @@
 /* gskgldriver.c
  *
+ * Copyright 2017 Timm Bäder <mail@baedert.org>
+ * Copyright 2018 Matthias Clasen <mclasen@redhat.com>
+ * Copyright 2018 Alexander Larsson <alexl@redhat.com>
  * Copyright 2020 Christian Hergert <chergert@redhat.com>
  *
  * This library is free software; you can redistribute it and/or
