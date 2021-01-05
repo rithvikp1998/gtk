@@ -516,8 +516,12 @@ gsk_next_driver_load_texture (GskNextDriver *self,
   t->mag_filter = mag_filter;
   t->texture_id = gsk_gl_command_queue_upload_texture (self->command_queue,
                                                        source_texture,
+                                                       0,
+                                                       0,
                                                        t->width,
-                                                       t->height);
+                                                       t->height,
+                                                       t->min_filter,
+                                                       t->mag_filter);
 
   if (gdk_texture_set_render_data (texture, self, t, gsk_next_driver_release_texture))
     t->user = texture;

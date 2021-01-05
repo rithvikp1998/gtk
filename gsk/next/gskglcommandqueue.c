@@ -21,6 +21,7 @@
 #include "config.h"
 
 #include <gdk/gdkglcontextprivate.h>
+#include <gdk/gdkmemorytextureprivate.h>
 #include <gsk/gskdebugprivate.h>
 #include <epoxy/gl.h>
 #include <string.h>
@@ -900,11 +901,77 @@ gsk_gl_command_queue_bind_framebuffer (GskGLCommandQueue *self,
   gsk_gl_attachment_state_bind_framebuffer (self->attachments, framebuffer);
 }
 
-guint
+int
 gsk_gl_command_queue_upload_texture (GskGLCommandQueue *self,
                                      GdkTexture        *texture,
+                                     guint              x_offset,
+                                     guint              y_offset,
                                      guint              width,
-                                     guint              height)
+                                     guint              height,
+                                     int                min_filter,
+                                     int                mag_filter)
 {
-  return 0;
+  cairo_surface_t *surface = NULL;
+  GdkMemoryFormat data_format;
+  const guchar *data;
+  gsize data_stride;
+  gsize bpp;
+  int texture_id;
+
+  g_return_val_if_fail (GSK_IS_GL_COMMAND_QUEUE (self), 0);
+  g_return_val_if_fail (!GDK_IS_GL_TEXTURE (texture), 0);
+  g_return_val_if_fail (x_offset + width <= gdk_texture_get_width (texture), 0);
+  g_return_val_if_fail (y_offset + height <= gdk_texture_get_height (texture), 0);
+  g_return_val_if_fail (min_filter == GL_LINEAR || min_filter == GL_NEAREST, 0);
+  g_return_val_if_fail (mag_filter == GL_LINEAR || min_filter == GL_NEAREST, 0);
+
+  if (width > self->max_texture_size || height > self->max_texture_size)
+    {
+      g_warning ("Attempt to create texture of size %ux%u but max size is %d. "
+                 "Clipping will occur.",
+                 width, height, self->max_texture_size);
+      width = MAX (width, self->max_texture_size);
+      height = MAX (height, self->max_texture_size);
+    }
+
+  texture_id = gsk_gl_command_queue_create_texture (self, width, height, min_filter, mag_filter);
+  if (texture_id == -1)
+    return texture_id;
+
+  if (GDK_IS_MEMORY_TEXTURE (texture))
+    {
+      GdkMemoryTexture *memory_texture = GDK_MEMORY_TEXTURE (texture);
+      data = gdk_memory_texture_get_data (memory_texture);
+      data_format = gdk_memory_texture_get_format (memory_texture);
+      data_stride = gdk_memory_texture_get_stride (memory_texture);
+    }
+  else
+    {
+      /* Fall back to downloading to a surface */
+      surface = gdk_texture_download_surface (texture);
+      cairo_surface_flush (surface);
+      data = cairo_image_surface_get_data (surface);
+      data_format = GDK_MEMORY_DEFAULT;
+      data_stride = cairo_image_surface_get_stride (surface);
+    }
+
+  bpp = gdk_memory_format_bytes_per_pixel (data_format);
+
+  /* Swtich to texture0 as 2D. We'll restore it later. */
+  glActiveTexture (GL_TEXTURE0);
+  glBindTexture (GL_TEXTURE_2D, texture_id);
+
+  gdk_gl_context_upload_texture (gdk_gl_context_get_current (),
+                                 data + x_offset * bpp + y_offset * data_stride,
+                                 width, height, data_stride,
+                                 data_format, GL_TEXTURE_2D);
+
+  /* Restore previous texture state if any */
+  if (self->attachments->textures[0].id > 0)
+    glBindTexture (self->attachments->textures[0].target,
+                   self->attachments->textures[0].id);
+
+  g_clear_pointer (&surface, cairo_surface_destroy);
+
+  return texture_id;
 }

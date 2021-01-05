@@ -116,10 +116,14 @@ void               gsk_gl_command_queue_make_current         (GskGLCommandQueue 
 void               gsk_gl_command_queue_begin_frame          (GskGLCommandQueue        *self);
 void               gsk_gl_command_queue_end_frame            (GskGLCommandQueue        *self);
 void               gsk_gl_command_queue_execute              (GskGLCommandQueue        *self);
-guint              gsk_gl_command_queue_upload_texture       (GskGLCommandQueue        *self,
+int                gsk_gl_command_queue_upload_texture       (GskGLCommandQueue        *self,
                                                               GdkTexture               *texture,
+                                                              guint                     x_offset,
+                                                              guint                     y_offset,
                                                               guint                     width,
-                                                              guint                     height);
+                                                              guint                     height,
+                                                              int                       min_filter,
+                                                              int                       mag_filter);
 int                gsk_gl_command_queue_create_texture       (GskGLCommandQueue        *self,
                                                               int                       width,
                                                               int                       height,
