@@ -97,11 +97,11 @@ typedef struct _GskGLRenderModelview
 typedef struct _GskGLRenderOffscreen
 {
   const graphene_rect_t *bounds;
-  guint texture_id;
   float x;
   float y;
   float x2;
   float y2;
+  guint texture_id;
   guint force_offscreen : 1;
   guint reset_clip : 1;
   guint do_not_cache : 1;
@@ -153,6 +153,21 @@ node_supports_transform (GskRenderNode *node)
       default:
         return FALSE;
     }
+}
+
+static inline gboolean G_GNUC_PURE
+color_matrix_modifies_alpha (GskRenderNode *node)
+{
+  const graphene_matrix_t *matrix = gsk_color_matrix_node_get_color_matrix (node);
+  const graphene_vec4_t *offset = gsk_color_matrix_node_get_color_offset (node);
+  graphene_vec4_t row3;
+
+  if (graphene_vec4_get_w (offset) != 0.0f)
+    return TRUE;
+
+  graphene_matrix_get_row (matrix, 3, &row3);
+
+  return !graphene_vec4_equal (graphene_vec4_w_axis (), &row3);
 }
 
 static inline gboolean
@@ -1549,6 +1564,26 @@ gsk_gl_render_job_visit_opacity_node (GskGLRenderJob *job,
 }
 
 static void
+gsk_gl_render_job_visit_text_node (GskGLRenderJob *job,
+                                   GskRenderNode  *node,
+                                   const GdkRGBA  *color,
+                                   gboolean        force_color)
+{
+}
+
+static void
+gsk_gl_render_job_visit_shadow_node (GskGLRenderJob *job,
+                                     GskRenderNode  *node)
+{
+}
+
+static void
+gsk_gl_render_job_visit_blur_node (GskGLRenderJob *job,
+                                   GskRenderNode  *node)
+{
+}
+
+static void
 gsk_gl_render_job_visit_node (GskGLRenderJob *job,
                               GskRenderNode  *node)
 {
@@ -1659,8 +1694,22 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
       gsk_gl_render_job_visit_opacity_node (job, node);
     break;
 
-    case GSK_BLEND_NODE:
+    case GSK_SHADOW_NODE:
+      gsk_gl_render_job_visit_shadow_node (job, node);
+    break;
+
+    case GSK_TEXT_NODE:
+      gsk_gl_render_job_visit_text_node (job,
+                                         node,
+                                         gsk_text_node_get_color (node),
+                                         FALSE);
+    break;
+
     case GSK_BLUR_NODE:
+      gsk_gl_render_job_visit_blur_node (job, node);
+    break;
+
+    case GSK_BLEND_NODE:
     case GSK_CAIRO_NODE:
     case GSK_COLOR_MATRIX_NODE:
     case GSK_GL_SHADER_NODE:
@@ -1668,9 +1717,7 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
     case GSK_REPEATING_LINEAR_GRADIENT_NODE:
     case GSK_REPEATING_RADIAL_GRADIENT_NODE:
     case GSK_REPEAT_NODE:
-    case GSK_SHADOW_NODE:
     case GSK_TEXTURE_NODE:
-    case GSK_TEXT_NODE:
     break;
 
     case GSK_NOT_A_RENDER_NODE:
