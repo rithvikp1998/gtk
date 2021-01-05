@@ -23,6 +23,9 @@
 
 #include "config.h"
 
+#include <gdk/gdkglcontextprivate.h>
+#include <gdk/gdktextureprivate.h>
+#include <gdk/gdkgltextureprivate.h>
 #include <gsk/gskdebugprivate.h>
 #include <gsk/gskrendererprivate.h>
 
@@ -40,13 +43,13 @@ G_DEFINE_TYPE (GskNextDriver, gsk_next_driver, G_TYPE_OBJECT)
 
 typedef struct _GskGLTexture
 {
-  GLuint      texture_id;
   int         width;
   int         height;
   GLuint      min_filter;
   GLuint      mag_filter;
-  GdkTexture *user;
   gint64      last_used_in_frame;
+  GdkTexture *user;
+  GLuint      texture_id;
   guint       permanent : 1;
 } GskGLTexture;
 
@@ -101,6 +104,12 @@ remove_texture_key_for_id (GskNextDriver *self,
                                    NULL,
                                    (gpointer *)&key))
     g_hash_table_remove (self->key_to_texture_id, key);
+}
+
+static void
+gsk_next_driver_release_texture (gpointer data)
+{
+  ((GskGLTexture *)data)->user = NULL;
 }
 
 static guint
@@ -435,4 +444,88 @@ gsk_next_driver_insert_texture (GskNextDriver       *self,
 
   g_hash_table_insert (self->key_to_texture_id, k, GUINT_TO_POINTER (texture_id));
   g_hash_table_insert (self->texture_id_to_key, GUINT_TO_POINTER (texture_id), k);
+}
+
+guint
+gsk_next_driver_load_texture (GskNextDriver *self,
+                              GdkTexture    *texture,
+                              int            min_filter,
+                              int            mag_filter)
+{
+  GdkGLContext *context;
+  GdkTexture *downloaded_texture = NULL;
+  GdkTexture *source_texture;
+  GskGLTexture *t;
+
+  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), 0);
+  g_return_val_if_fail (GDK_IS_TEXTURE (texture), 0);
+  g_return_val_if_fail (GSK_IS_GL_COMMAND_QUEUE (self->command_queue), 0);
+
+  context = self->command_queue->context;
+
+  if (GDK_IS_GL_TEXTURE (texture))
+    {
+      GdkGLContext *texture_context = gdk_gl_texture_get_context ((GdkGLTexture *)texture);
+      GdkGLContext *shared_context = gdk_gl_context_get_shared_context (context);
+
+      if (texture_context == context ||
+          (shared_context != NULL &&
+           shared_context == gdk_gl_context_get_shared_context (texture_context)))
+
+        {
+          /* A GL texture from the same GL context is a simple task... */
+          return gdk_gl_texture_get_id ((GdkGLTexture *)texture);
+        }
+      else
+        {
+          cairo_surface_t *surface;
+
+          /* In this case, we have to temporarily make the texture's
+           * context the current one, download its data into our context
+           * and then create a texture from it. */
+          if (texture_context != NULL)
+            gdk_gl_context_make_current (texture_context);
+
+          surface = gdk_texture_download_surface (texture);
+          downloaded_texture = gdk_texture_new_for_surface (surface);
+          cairo_surface_destroy (surface);
+
+          gdk_gl_context_make_current (context);
+
+          source_texture = downloaded_texture;
+        }
+    }
+  else
+    {
+      t = gdk_texture_get_render_data (texture, self);
+
+      if (t)
+        {
+          if (t->min_filter == min_filter && t->mag_filter == mag_filter)
+            return t->texture_id;
+        }
+
+      source_texture = texture;
+    }
+
+  t = g_slice_new0 (GskGLTexture);
+  t->width = gdk_texture_get_width (texture);
+  t->height = gdk_texture_get_height (texture);
+  t->last_used_in_frame = self->current_frame_id;
+  t->min_filter = min_filter;
+  t->mag_filter = mag_filter;
+  t->texture_id = gsk_gl_command_queue_upload_texture (self->command_queue,
+                                                       source_texture,
+                                                       t->width,
+                                                       t->height);
+
+  if (gdk_texture_set_render_data (texture, self, t, gsk_next_driver_release_texture))
+    t->user = texture;
+
+  gdk_gl_context_label_object_printf (context, GL_TEXTURE, t->texture_id,
+                                      "GdkTexture<%p> %d", texture, t->texture_id);
+
+  g_clear_object (&downloaded_texture);
+
+  return t->texture_id;
 }

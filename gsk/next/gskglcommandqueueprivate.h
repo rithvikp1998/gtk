@@ -118,7 +118,8 @@ void               gsk_gl_command_queue_end_frame            (GskGLCommandQueue 
 void               gsk_gl_command_queue_execute              (GskGLCommandQueue        *self);
 guint              gsk_gl_command_queue_upload_texture       (GskGLCommandQueue        *self,
                                                               GdkTexture               *texture,
-                                                              GError                  **error);
+                                                              guint                     width,
+                                                              guint                     height);
 int                gsk_gl_command_queue_create_texture       (GskGLCommandQueue        *self,
                                                               int                       width,
                                                               int                       height,

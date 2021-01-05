@@ -899,3 +899,12 @@ gsk_gl_command_queue_bind_framebuffer (GskGLCommandQueue *self,
 
   gsk_gl_attachment_state_bind_framebuffer (self->attachments, framebuffer);
 }
+
+guint
+gsk_gl_command_queue_upload_texture (GskGLCommandQueue *self,
+                                     GdkTexture        *texture,
+                                     guint              width,
+                                     guint              height)
+{
+  return 0;
+}

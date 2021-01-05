@@ -110,6 +110,10 @@ gboolean       gsk_next_driver_lookup_texture          (GskNextDriver        *se
 void           gsk_next_driver_insert_texture          (GskNextDriver        *self,
                                                         const GskTextureKey  *key,
                                                         guint                 texture_id);
+guint          gsk_next_driver_load_texture            (GskNextDriver        *self,
+                                                        GdkTexture           *texture,
+                                                        int                   min_filter,
+                                                        int                   mag_filter);
 
 G_END_DECLS
 
