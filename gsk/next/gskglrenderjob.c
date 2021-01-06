@@ -1634,6 +1634,33 @@ static void
 gsk_gl_render_job_visit_repeat_node (GskGLRenderJob *job,
                                      GskRenderNode  *node)
 {
+  GskRenderNode *child = gtk_repeat_node_get_child (job);
+  const graphene_rect_t *child_bounds = gsk_repeat_node_get_child_bounds (node);
+
+  if (node_is_invisible (child))
+    return;
+
+  if (!graphene_rect_equal (child_bounds, &child->bounds))
+    {
+      /* TODO: implement these repeat nodes. */
+      gsk_gl_render_job_visit_as_fallback (job, node);
+      return;
+    }
+
+  /* If the size of the repeat node is smaller than the size of the
+   * child node, we don't repeat at all and can just draw that part
+   * of the child texture... */
+  if (graphene_rect_contains_rect (child_bounds, &node->bounds))
+    {
+      gsk_gl_render_job_visit_clipped_child (job,
+                                             child,
+                                             &(GskRoundedRect) {
+                                               .bounds = *child_bounds,
+                                             });
+      return;
+    }
+
+  /* TODO: */
 }
 
 static void
