@@ -885,6 +885,24 @@ gsk_gl_render_job_visit_conic_gradient_node (GskGLRenderJob *job,
 }
 
 static void
+gsk_gl_render_job_visit_radial_gradient_node (GskGLRenderJob *job,
+                                              GskRenderNode  *node)
+{
+}
+
+static void
+gsk_gl_render_job_visit_repeating_linear_gradient_node (GskGLRenderJob *job,
+                                                        GskRenderNode  *node)
+{
+}
+
+static void
+gsk_gl_render_job_visit_repeating_radial_gradient_node (GskGLRenderJob *job,
+                                                        GskRenderNode  *node)
+{
+}
+
+static void
 gsk_gl_render_job_visit_clipped_child (GskGLRenderJob       *job,
                                        GskRenderNode        *child,
                                        const GskRoundedRect *clip)
@@ -1355,7 +1373,6 @@ static void
 gsk_gl_render_job_visit_blurred_inset_shadow_node (GskGLRenderJob *job,
                                                    GskRenderNode  *node)
 {
-  g_warning ("TODO: blurred inset shadow");
 }
 
 static void
@@ -1584,6 +1601,42 @@ gsk_gl_render_job_visit_blur_node (GskGLRenderJob *job,
 }
 
 static void
+gsk_gl_render_job_visit_blend_node (GskGLRenderJob *job,
+                                    GskRenderNode  *node)
+{
+}
+
+static void
+gsk_gl_render_job_visit_cairo_node (GskGLRenderJob *job,
+                                    GskRenderNode  *node)
+{
+}
+
+static void
+gsk_gl_render_job_visit_color_matrix_node (GskGLRenderJob *job,
+                                           GskRenderNode  *node)
+{
+}
+
+static void
+gsk_gl_render_job_visit_gl_shader_node (GskGLRenderJob *job,
+                                        GskRenderNode  *node)
+{
+}
+
+static void
+gsk_gl_render_job_visit_texture_node (GskGLRenderJob *job,
+                                      GskRenderNode  *node)
+{
+}
+
+static void
+gsk_gl_render_job_visit_repeat_node (GskGLRenderJob *job,
+                                     GskRenderNode  *node)
+{
+}
+
+static void
 gsk_gl_render_job_visit_node (GskGLRenderJob *job,
                               GskRenderNode  *node)
 {
@@ -1598,6 +1651,44 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
 
   switch (gsk_render_node_get_node_type (node))
     {
+    case GSK_BLEND_NODE:
+      gsk_gl_render_job_visit_blend_node (job, node);
+    break;
+
+    case GSK_BLUR_NODE:
+      gsk_gl_render_job_visit_blur_node (job, node);
+    break;
+
+    case GSK_BORDER_NODE:
+      if (gsk_border_node_get_uniform (node))
+        gsk_gl_render_job_visit_uniform_border_node (job, node);
+      else
+        gsk_gl_render_job_visit_border_node (job, node);
+    break;
+
+    case GSK_CAIRO_NODE:
+      gsk_gl_render_job_visit_cairo_node (job, node);
+    break;
+
+    case GSK_CLIP_NODE:
+      gsk_gl_render_job_visit_clip_node (job, node);
+    break;
+
+    case GSK_COLOR_NODE:
+      gsk_gl_render_job_visit_color_node (job, node);
+    break;
+
+    case GSK_COLOR_MATRIX_NODE:
+      gsk_gl_render_job_visit_color_matrix_node (job, node);
+    break;
+
+    case GSK_CONIC_GRADIENT_NODE:
+      if (gsk_conic_gradient_node_get_n_color_stops (node) < MAX_GRADIENT_STOPS)
+        gsk_gl_render_job_visit_conic_gradient_node (job, node);
+      else
+        gsk_gl_render_job_visit_as_fallback (job, node);
+    break;
+
     case GSK_CONTAINER_NODE:
       {
         guint n_children = gsk_container_node_get_n_children (node);
@@ -1608,71 +1699,6 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
             gsk_gl_render_job_visit_node (job, child);
           }
       }
-    break;
-
-    case GSK_DEBUG_NODE:
-      {
-        const char *message = gsk_debug_node_get_message (node);
-
-        if (message != NULL)
-          gsk_gl_command_queue_push_debug_group (job->command_queue, message);
-
-        gsk_gl_render_job_visit_node (job, gsk_debug_node_get_child (node));
-
-        if (message != NULL)
-          gsk_gl_command_queue_pop_debug_group (job->command_queue);
-      }
-    break;
-
-    case GSK_COLOR_NODE:
-      gsk_gl_render_job_visit_color_node (job, node);
-    break;
-
-    case GSK_TRANSFORM_NODE:
-      gsk_gl_render_job_visit_transform_node (job, node);
-    break;
-
-    case GSK_CLIP_NODE:
-      gsk_gl_render_job_visit_clip_node (job, node);
-    break;
-
-    case GSK_ROUNDED_CLIP_NODE:
-      gsk_gl_render_job_visit_rounded_clip_node (job, node);
-    break;
-
-    case GSK_BORDER_NODE:
-      if (gsk_border_node_get_uniform (node))
-        gsk_gl_render_job_visit_uniform_border_node (job, node);
-      else
-        gsk_gl_render_job_visit_border_node (job, node);
-    break;
-
-    case GSK_INSET_SHADOW_NODE:
-      if (gsk_inset_shadow_node_get_blur_radius (node) > 0)
-        gsk_gl_render_job_visit_blurred_inset_shadow_node (job, node);
-      else
-        gsk_gl_render_job_visit_unblurred_inset_shadow_node (job, node);
-    break;
-
-    case GSK_OUTSET_SHADOW_NODE:
-      if (gsk_outset_shadow_node_get_blur_radius (node) > 0)
-        gsk_gl_render_job_visit_blurred_outset_shadow_node (job, node);
-      else
-        gsk_gl_render_job_visit_unblurred_outset_shadow_node (job, node);
-    break;
-
-    case GSK_LINEAR_GRADIENT_NODE:
-      if (gsk_linear_gradient_node_get_n_color_stops (node) < MAX_GRADIENT_STOPS)
-        gsk_gl_render_job_visit_linear_gradient_node (job, node);
-      else
-        gsk_gl_render_job_visit_as_fallback (job, node);
-    break;
-
-    case GSK_CONIC_GRADIENT_NODE:
-      if (gsk_conic_gradient_node_get_n_color_stops (node) < MAX_GRADIENT_STOPS)
-        gsk_gl_render_job_visit_conic_gradient_node (job, node);
-      else
-        gsk_gl_render_job_visit_as_fallback (job, node);
     break;
 
     case GSK_CROSS_FADE_NODE:
@@ -1690,8 +1716,65 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
       }
     break;
 
+    case GSK_DEBUG_NODE:
+      {
+        const char *message = gsk_debug_node_get_message (node);
+
+        if (message != NULL)
+          gsk_gl_command_queue_push_debug_group (job->command_queue, message);
+        gsk_gl_render_job_visit_node (job, gsk_debug_node_get_child (node));
+        if (message != NULL)
+          gsk_gl_command_queue_pop_debug_group (job->command_queue);
+      }
+    break;
+
+    case GSK_GL_SHADER_NODE:
+      gsk_gl_render_job_visit_gl_shader_node (job, node);
+    break;
+
+    case GSK_INSET_SHADOW_NODE:
+      if (gsk_inset_shadow_node_get_blur_radius (node) > 0)
+        gsk_gl_render_job_visit_blurred_inset_shadow_node (job, node);
+      else
+        gsk_gl_render_job_visit_unblurred_inset_shadow_node (job, node);
+    break;
+
+    case GSK_LINEAR_GRADIENT_NODE:
+      if (gsk_linear_gradient_node_get_n_color_stops (node) < MAX_GRADIENT_STOPS)
+        gsk_gl_render_job_visit_linear_gradient_node (job, node);
+      else
+        gsk_gl_render_job_visit_as_fallback (job, node);
+    break;
+
     case GSK_OPACITY_NODE:
       gsk_gl_render_job_visit_opacity_node (job, node);
+    break;
+
+    case GSK_OUTSET_SHADOW_NODE:
+      if (gsk_outset_shadow_node_get_blur_radius (node) > 0)
+        gsk_gl_render_job_visit_blurred_outset_shadow_node (job, node);
+      else
+        gsk_gl_render_job_visit_unblurred_outset_shadow_node (job, node);
+    break;
+
+    case GSK_RADIAL_GRADIENT_NODE:
+      gsk_gl_render_job_visit_radial_gradient_node (job, node);
+    break;
+
+    case GSK_REPEAT_NODE:
+      gsk_gl_render_job_visit_repeat_node (job, node);
+    break;
+
+    case GSK_REPEATING_LINEAR_GRADIENT_NODE:
+      gsk_gl_render_job_visit_repeating_linear_gradient_node (job, node);
+    break;
+
+    case GSK_REPEATING_RADIAL_GRADIENT_NODE:
+      gsk_gl_render_job_visit_repeating_radial_gradient_node (job, node);
+    break;
+
+    case GSK_ROUNDED_CLIP_NODE:
+      gsk_gl_render_job_visit_rounded_clip_node (job, node);
     break;
 
     case GSK_SHADOW_NODE:
@@ -1705,19 +1788,12 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
                                          FALSE);
     break;
 
-    case GSK_BLUR_NODE:
-      gsk_gl_render_job_visit_blur_node (job, node);
+    case GSK_TEXTURE_NODE:
+      gsk_gl_render_job_visit_texture_node (job, node);
     break;
 
-    case GSK_BLEND_NODE:
-    case GSK_CAIRO_NODE:
-    case GSK_COLOR_MATRIX_NODE:
-    case GSK_GL_SHADER_NODE:
-    case GSK_RADIAL_GRADIENT_NODE:
-    case GSK_REPEATING_LINEAR_GRADIENT_NODE:
-    case GSK_REPEATING_RADIAL_GRADIENT_NODE:
-    case GSK_REPEAT_NODE:
-    case GSK_TEXTURE_NODE:
+    case GSK_TRANSFORM_NODE:
+      gsk_gl_render_job_visit_transform_node (job, node);
     break;
 
     case GSK_NOT_A_RENDER_NODE:
