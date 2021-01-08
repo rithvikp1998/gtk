@@ -92,38 +92,40 @@ struct _GskNextDriver
   guint in_frame : 1;
 };
 
-GskNextDriver *gsk_next_driver_new                  (GskGLCommandQueue    *command_queue,
-                                                     gboolean              debug,
-                                                     GError              **error);
-GdkGLContext  *gsk_next_driver_get_context          (GskNextDriver        *self);
-gboolean       gsk_next_driver_create_render_target (GskNextDriver        *self,
-                                                     int                   width,
-                                                     int                   height,
-                                                     guint                *out_fbo_id,
-                                                     guint                *out_texture_id);
-void           gsk_next_driver_begin_frame          (GskNextDriver        *self);
-void           gsk_next_driver_end_frame            (GskNextDriver        *self);
-guint          gsk_next_driver_lookup_texture       (GskNextDriver        *self,
-                                                     const GskTextureKey  *key);
-void           gsk_next_driver_cache_texture        (GskNextDriver        *self,
-                                                     const GskTextureKey  *key,
-                                                     guint                 texture_id);
-guint          gsk_next_driver_load_texture         (GskNextDriver        *self,
-                                                     GdkTexture           *texture,
-                                                     int                   min_filter,
-                                                     int                   mag_filter);
-GskGLTexture  *gsk_next_driver_create_texture       (GskNextDriver        *self,
-                                                     float                 width,
-                                                     float                 height,
-                                                     int                   min_filter,
-                                                     int                   mag_filter);
-GskGLTexture  *gsk_next_driver_acquire_texture      (GskNextDriver        *self,
-                                                     float                 width,
-                                                     float                 height,
-                                                     int                   min_filter,
-                                                     int                   mag_filter);
-void           gsk_next_driver_release_texture      (GskNextDriver        *self,
-                                                     GskGLTexture         *texture);
+GskNextDriver *gsk_next_driver_new                     (GskGLCommandQueue    *command_queue,
+                                                        gboolean              debug,
+                                                        GError              **error);
+GdkGLContext  *gsk_next_driver_get_context             (GskNextDriver        *self);
+void           gsk_next_driver_autorelease_framebuffer (GskNextDriver        *self,
+                                                        guint                 framebuffer_id);
+gboolean       gsk_next_driver_create_render_target    (GskNextDriver        *self,
+                                                        int                   width,
+                                                        int                   height,
+                                                        guint                *out_fbo_id,
+                                                        guint                *out_texture_id);
+void           gsk_next_driver_begin_frame             (GskNextDriver        *self);
+void           gsk_next_driver_end_frame               (GskNextDriver        *self);
+guint          gsk_next_driver_lookup_texture          (GskNextDriver        *self,
+                                                        const GskTextureKey  *key);
+void           gsk_next_driver_cache_texture           (GskNextDriver        *self,
+                                                        const GskTextureKey  *key,
+                                                        guint                 texture_id);
+guint          gsk_next_driver_load_texture            (GskNextDriver        *self,
+                                                        GdkTexture           *texture,
+                                                        int                   min_filter,
+                                                        int                   mag_filter);
+GskGLTexture  *gsk_next_driver_create_texture          (GskNextDriver        *self,
+                                                        float                 width,
+                                                        float                 height,
+                                                        int                   min_filter,
+                                                        int                   mag_filter);
+GskGLTexture  *gsk_next_driver_acquire_texture         (GskNextDriver        *self,
+                                                        float                 width,
+                                                        float                 height,
+                                                        int                   min_filter,
+                                                        int                   mag_filter);
+void           gsk_next_driver_release_texture         (GskNextDriver        *self,
+                                                        GskGLTexture         *texture);
 
 G_END_DECLS
 

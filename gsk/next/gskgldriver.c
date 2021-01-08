@@ -361,7 +361,7 @@ gsk_next_driver_get_context (GskNextDriver *self)
  * @out_fbo_id: (out): location for framebuffer id
  * @out_texture_id: (out): location for texture id
  *
- * Creates a new render target where @out_texture_id is bount
+ * Creates a new render target where @out_texture_id is bound
  * to the framebuffer @out_fbo_id using glFramebufferTexture2D().
  *
  * Returns: %TRUE if successful; otherwise %FALSE and @out_fbo_id and
@@ -520,10 +520,13 @@ gsk_next_driver_load_texture (GskNextDriver *self,
           source_texture = downloaded_texture;
         }
     }
-  else if ((t = gdk_texture_get_render_data (texture, self)))
+  else
     {
-      if (t->min_filter == min_filter && t->mag_filter == mag_filter)
-        return t->texture_id;
+      if ((t = gdk_texture_get_render_data (texture, self)))
+        {
+          if (t->min_filter == min_filter && t->mag_filter == mag_filter)
+            return t->texture_id;
+        }
 
       source_texture = texture;
     }
