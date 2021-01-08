@@ -537,6 +537,8 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
 
         {
           /* A GL texture from the same GL context is a simple task... */
+          area->origin.x = area->origin.y = 0;
+          area->size.width = area->size.height = 1;
           return gdk_gl_texture_get_id ((GdkGLTexture *)texture);
         }
       else
@@ -563,7 +565,11 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
       if ((t = gdk_texture_get_render_data (texture, self)))
         {
           if (t->min_filter == min_filter && t->mag_filter == mag_filter)
-            return t->texture_id;
+            {
+              area->origin.x = area->origin.y = 0;
+              area->size.width = area->size.height = 1;
+              return t->texture_id;
+            }
         }
 
       source_texture = texture;
@@ -608,6 +614,9 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
 
   if (gdk_texture_set_render_data (texture, self, t, gsk_gl_texture_destroyed))
     t->user = texture;
+
+  area->origin.x = area->origin.y = 0;
+  area->size.width = area->size.height = 1;
 
   gdk_gl_context_label_object_printf (context, GL_TEXTURE, t->texture_id,
                                       "GdkTexture<%p> %d", texture, t->texture_id);
