@@ -256,6 +256,14 @@ failure:
   return ret;
 }
 
+/**
+ * gsk_next_driver_autorelease_framebuffer:
+ * @self: a #GskNextDriver
+ * @framebuffer_id: the id of the OpenGL framebuffer
+ *
+ * Marks @framebuffer_id to be deleted when the current frame
+ * has completed.
+ */
 void
 gsk_next_driver_autorelease_framebuffer (GskNextDriver *self,
                                          guint          framebuffer_id)
@@ -296,6 +304,15 @@ gsk_next_driver_new (GskGLCommandQueue  *command_queue,
   return g_steal_pointer (&self);
 }
 
+/**
+ * gsk_next_driver_begin_frame:
+ * @self: a #GskNextDriver
+ *
+ * Begin a new frame.
+ *
+ * Texture atlases, pools, and other resources will be prepared to
+ * draw the next frame.
+ */
 void
 gsk_next_driver_begin_frame (GskNextDriver *self)
 {
@@ -320,6 +337,14 @@ gsk_next_driver_begin_frame (GskNextDriver *self)
                                            self->current_frame_id - TEXTURES_CACHED_FOR_N_FRAMES);
 }
 
+/**
+ * gsk_next_driver_end_frame:
+ * @self: a #GskNextDriver
+ *
+ * Clean up resources from drawing the current frame.
+ *
+ * Temporary resources used while drawing will be released.
+ */
 void
 gsk_next_driver_end_frame (GskNextDriver *self)
 {
@@ -639,6 +664,9 @@ gsk_next_driver_acquire_texture (GskNextDriver *self,
  * Releases @texture back into the pool so that it can be used later
  * in the command stream by future batches. This helps reduce VRAM
  * usage on the GPU.
+ *
+ * When the frame has completed, pooled textures will be released
+ * to free additional VRAM back to the system.
  */
 void
 gsk_next_driver_release_texture (GskNextDriver *self,
