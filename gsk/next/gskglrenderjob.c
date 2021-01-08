@@ -1634,7 +1634,7 @@ static void
 gsk_gl_render_job_visit_repeat_node (GskGLRenderJob *job,
                                      GskRenderNode  *node)
 {
-  GskRenderNode *child = gtk_repeat_node_get_child (job);
+  GskRenderNode *child = gsk_repeat_node_get_child (node);
   const graphene_rect_t *child_bounds = gsk_repeat_node_get_child_bounds (node);
 
   if (node_is_invisible (child))
