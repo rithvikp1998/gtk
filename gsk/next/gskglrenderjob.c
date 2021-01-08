@@ -97,10 +97,7 @@ typedef struct _GskGLRenderModelview
 typedef struct _GskGLRenderOffscreen
 {
   const graphene_rect_t *bounds;
-  float x;
-  float y;
-  float x2;
-  float y2;
+  graphene_rect_t area;
   guint texture_id;
   guint force_offscreen : 1;
   guint reset_clip : 1;
@@ -1844,10 +1841,10 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
     {
       /* Just to be safe. */
       offscreen->texture_id = 0;
-      offscreen->x = 0;
-      offscreen->x2 = 1;
-      offscreen->y = 0;
-      offscreen->y2 = 1;
+      offscreen->area.origin.x = 0;
+      offscreen->area.size.width = 1;
+      offscreen->area.origin.y = 0;
+      offscreen->area.origin.width = 1;
       return FALSE;
     }
 
@@ -1857,7 +1854,11 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
       GdkTexture *texture = gsk_texture_node_get_texture (node);
 
       offscreen->texture_id =
-        gsk_next_driver_load_texture (job->driver, texture, GL_LINEAR, GL_LINEAR);
+        gsk_next_driver_load_texture (job->driver,
+                                      texture,
+                                      GL_LINEAR,
+                                      GL_LINEAR,
+                                      &offscreen.area);
     }
 
   return FALSE;

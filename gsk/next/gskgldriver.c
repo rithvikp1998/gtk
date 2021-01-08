@@ -575,7 +575,6 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
   if (size_can_be_atlased (width, height))
     {
       GskGLTextureAtlas *atlas;
-      float x, y;
 
       if (gsk_gl_texture_library_lookup (GSK_GL_TEXTURE_LIBRARY (self->icons),
                                          texture, &atlas, area))
