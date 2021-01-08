@@ -154,3 +154,32 @@ gsk_gl_texture_library_end_frame (GskGLTextureLibrary *self)
   if (GSK_GL_TEXTURE_LIBRARY_GET_CLASS (self)->end_frame)
     GSK_GL_TEXTURE_LIBRARY_GET_CLASS (self)->end_frame (self);
 }
+
+gboolean
+gsk_gl_texture_library_pack (GskGLTextureLibrary  *self,
+                             gconstpointer         key,
+                             gsize                 keylen,
+                             float                 width,
+                             float                 height,
+                             GskGLTextureAtlas   **atlas,
+                             graphene_rect_t      *area)
+{
+  return FALSE;
+}
+
+gboolean
+gsk_gl_texture_library_lookup (GskGLTextureLibrary  *library,
+                               gconstpointer         key,
+                               GskGLTextureAtlas   **atlas,
+                               graphene_rect_t      *area)
+{
+  return FALSE;
+}
+
+void
+gsk_gl_texture_library_upload (GskGLTextureLibrary   *self,
+                               GskGLTextureAtlas     *atlas,
+                               const graphene_rect_t *area,
+                               GdkTexture            *texture)
+{
+}
