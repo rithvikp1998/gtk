@@ -42,6 +42,13 @@
 
 G_DEFINE_TYPE (GskNextDriver, gsk_next_driver, G_TYPE_OBJECT)
 
+static inline gboolean
+size_can_be_atlased (float width,
+                     float height)
+{
+  return width < 128 && height < 128;
+}
+
 static guint
 texture_key_hash (gconstpointer v)
 {
@@ -479,6 +486,8 @@ gsk_next_driver_cache_texture (GskNextDriver       *self,
  * @texture: a #GdkTexture
  * @min_filter: GL_NEAREST or GL_LINEAR
  * @mag_filter: GL_NEAREST or GL_LINEAR
+ * @area: (out): a #graphene_rect_t containing the area within the texture
+ *   containing the contents that were uploaded.
  *
  * Loads a #GdkTexture by uploading the contents to the GPU when
  * necessary. If @texture is a #GdkGLTexture, it can be used without
@@ -497,19 +506,23 @@ gsk_next_driver_cache_texture (GskNextDriver       *self,
  * Returns: a texture identifier
  */
 guint
-gsk_next_driver_load_texture (GskNextDriver *self,
-                              GdkTexture    *texture,
-                              int            min_filter,
-                              int            mag_filter)
+gsk_next_driver_load_texture (GskNextDriver   *self,
+                              GdkTexture      *texture,
+                              int              min_filter,
+                              int              mag_filter,
+                              graphene_rect_t *area)
 {
   GdkGLContext *context;
   GdkTexture *downloaded_texture = NULL;
   GdkTexture *source_texture;
   GskGLTexture *t;
+  float width;
+  float height;
 
   g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), 0);
   g_return_val_if_fail (GDK_IS_TEXTURE (texture), 0);
   g_return_val_if_fail (GSK_IS_GL_COMMAND_QUEUE (self->command_queue), 0);
+  g_return_val_if_fail (area != NULL, 0);
 
   context = self->command_queue->context;
 
@@ -554,6 +567,29 @@ gsk_next_driver_load_texture (GskNextDriver *self,
         }
 
       source_texture = texture;
+    }
+
+  width = gdk_texture_get_width (texture);
+  height = gdk_texture_get_height (texture);
+
+  if (size_can_be_atlased (width, height))
+    {
+      GskGLTextureAtlas *atlas;
+      float x, y;
+
+      if (gsk_gl_texture_library_lookup (GSK_GL_TEXTURE_LIBRARY (self->icons),
+                                         texture, &atlas, area))
+        return atlas->texture_id;
+
+      if (gsk_gl_texture_library_pack (GSK_GL_TEXTURE_LIBRARY (self->icons),
+                                       texture, sizeof (void *),
+                                       width, height,
+                                       &atlas, area))
+        {
+          gsk_gl_texture_library_upload (GSK_GL_TEXTURE_LIBRARY (self->icons),
+                                         atlas, area, texture);
+          return atlas->texture_id;
+        }
     }
 
   t = g_slice_new0 (GskGLTexture);

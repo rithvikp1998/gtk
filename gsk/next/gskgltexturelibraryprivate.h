@@ -29,6 +29,11 @@ G_BEGIN_DECLS
 
 G_DECLARE_DERIVABLE_TYPE (GskGLTextureLibrary, gsk_gl_texture_library, GSK, GL_TEXTURE_LIBRARY, GObject)
 
+struct _GskGLTextureAtlas
+{
+  guint texture_id;
+};
+
 struct _GskGLTextureLibraryClass
 {
   GObjectClass parent_class;
@@ -37,24 +42,26 @@ struct _GskGLTextureLibraryClass
   void (*end_frame)   (GskGLTextureLibrary *library);
 };
 
-GdkGLContext *gsk_gl_texture_library_get_context (GskGLTextureLibrary  *self);
-void          gsk_gl_texture_library_set_funcs   (GHashFunc             hash_func,
-                                                  GEqualFunc            equal_func);
-void          gsk_gl_texture_library_begin_frame (GskGLTextureLibrary  *self);
-void          gsk_gl_texture_library_end_frame   (GskGLTextureLibrary  *self);
-gboolean      gsk_gl_texture_library_pack        (GskGLTextureLibrary  *self,
-                                                  gconstpointer         key,
-                                                  gsize                 keylen,
-                                                  int                   width,
-                                                  int                   height,
-                                                  GskGLTextureAtlas   **atlas,
-                                                  int                  *atlas_x,
-                                                  int                  *atlas_y);
-gboolean      gsk_gl_texture_library_lookup      (GskGLTextureLibrary  *library,
-                                                  gconstpointer         key,
-                                                  GskGLTextureAtlas   **atlas,
-                                                  int                  *atlas_x,
-                                                  int                  *atlas_y);
+GdkGLContext *gsk_gl_texture_library_get_context (GskGLTextureLibrary    *self);
+void          gsk_gl_texture_library_set_funcs   (GHashFunc               hash_func,
+                                                  GEqualFunc              equal_func);
+void          gsk_gl_texture_library_begin_frame (GskGLTextureLibrary    *self);
+void          gsk_gl_texture_library_end_frame   (GskGLTextureLibrary    *self);
+gboolean      gsk_gl_texture_library_pack        (GskGLTextureLibrary    *self,
+                                                  gconstpointer           key,
+                                                  gsize                   keylen,
+                                                  float                   width,
+                                                  float                   height,
+                                                  GskGLTextureAtlas     **atlas,
+                                                  graphene_rect_t        *area);
+gboolean      gsk_gl_texture_library_lookup      (GskGLTextureLibrary    *library,
+                                                  gconstpointer           key,
+                                                  GskGLTextureAtlas     **atlas,
+                                                  graphene_rect_t        *area);
+void          gsk_gl_texture_library_upload      (GskGLTextureLibrary    *self,
+                                                  GskGLTextureAtlas      *atlas,
+                                                  const graphene_rect_t  *area,
+                                                  GdkTexture             *texture);
 
 G_END_DECLS
 

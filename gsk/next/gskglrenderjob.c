@@ -110,11 +110,11 @@ typedef struct _GskGLRenderOffscreen
   guint autorelease : 1;
 } GskGLRenderOffscreen;
 
-static void     gsk_gl_render_job_visit_node       (GskGLRenderJob       *job,
-                                                    GskRenderNode        *node);
-static gboolean gsk_gl_render_job_render_offscreen (GskGLRenderJob       *job,
-                                                    GskRenderNode        *node,
-                                                    GskGLRenderOffscreen *offscreen);
+static void     gsk_gl_render_job_visit_node                (GskGLRenderJob       *job,
+                                                             GskRenderNode        *node);
+static gboolean gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
+                                                             GskRenderNode        *node,
+                                                             GskGLRenderOffscreen *offscreen);
 
 static inline gboolean G_GNUC_PURE
 node_is_invisible (const GskRenderNode *node)
@@ -1499,13 +1499,13 @@ gsk_gl_render_job_visit_cross_fade_node (GskGLRenderJob *job,
   offscreen_end.bounds = &node->bounds;
   offscreen_end.autorelease = TRUE;
 
-  if (!gsk_gl_render_job_render_offscreen (job, start_node, &offscreen_start))
+  if (!gsk_gl_render_job_visit_node_with_offscreen (job, start_node, &offscreen_start))
     {
       gsk_gl_render_job_visit_node (job, end_node);
       return;
     }
 
-  if (!gsk_gl_render_job_render_offscreen (job, end_node, &offscreen_end))
+  if (!gsk_gl_render_job_visit_node_with_offscreen (job, end_node, &offscreen_end))
     {
       float prev_alpha = job->alpha;
       gsk_gl_render_job_visit_node (job, start_node);
@@ -1554,7 +1554,7 @@ gsk_gl_render_job_visit_opacity_node (GskGLRenderJob *job,
       offscreen.reset_clip = TRUE;
       offscreen.autorelease = TRUE;
 
-      gsk_gl_render_job_render_offscreen (job, child, &offscreen);
+      gsk_gl_render_job_visit_node_with_offscreen (job, child, &offscreen);
 
       gsk_gl_program_begin_draw (job->driver->blit,
                                  &job->viewport,
@@ -1831,13 +1831,34 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
 }
 
 static gboolean
-gsk_gl_render_job_render_offscreen (GskGLRenderJob       *job,
-                                    GskRenderNode        *node,
-                                    GskGLRenderOffscreen *offscreen)
+gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
+                                             GskRenderNode        *node,
+                                             GskGLRenderOffscreen *offscreen)
 {
   g_assert (job != NULL);
   g_assert (node != NULL);
   g_assert (offscreen != NULL);
+  g_assert (offscreen->texture_id == 0);
+
+  if (node_is_invisible (node))
+    {
+      /* Just to be safe. */
+      offscreen->texture_id = 0;
+      offscreen->x = 0;
+      offscreen->x2 = 1;
+      offscreen->y = 0;
+      offscreen->y2 = 1;
+      return FALSE;
+    }
+
+  if (gsk_render_node_get_node_type (node) == GSK_TEXTURE_NODE &&
+      offscreen->force_offscreen == FALSE)
+    {
+      GdkTexture *texture = gsk_texture_node_get_texture (node);
+
+      offscreen->texture_id =
+        gsk_next_driver_load_texture (job->driver, texture, GL_LINEAR, GL_LINEAR);
+    }
 
   return FALSE;
 }
