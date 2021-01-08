@@ -36,22 +36,11 @@
 #include "gskgliconlibraryprivate.h"
 #include "gskglprogramprivate.h"
 #include "gskglshadowlibraryprivate.h"
+#include "gskgltexturepoolprivate.h"
 
 #define TEXTURES_CACHED_FOR_N_FRAMES 5
 
 G_DEFINE_TYPE (GskNextDriver, gsk_next_driver, G_TYPE_OBJECT)
-
-typedef struct _GskGLTexture
-{
-  int         width;
-  int         height;
-  GLuint      min_filter;
-  GLuint      mag_filter;
-  gint64      last_used_in_frame;
-  GdkTexture *user;
-  GLuint      texture_id;
-  guint       permanent : 1;
-} GskGLTexture;
 
 static guint
 texture_key_hash (gconstpointer v)
@@ -107,7 +96,7 @@ remove_texture_key_for_id (GskNextDriver *self,
 }
 
 static void
-gsk_next_driver_release_texture (gpointer data)
+gsk_gl_texture_destroyed (gpointer data)
 {
   ((GskGLTexture *)data)->user = NULL;
 }
@@ -168,10 +157,8 @@ gsk_next_driver_dispose (GObject *object)
     }
 
   g_assert (self->autorelease_framebuffers->len == 0);
-  g_assert (self->autorelease_textures->len == 0);
 
   g_clear_pointer (&self->autorelease_framebuffers, g_array_unref);
-  g_clear_pointer (&self->autorelease_textures, g_array_unref);
   g_clear_pointer (&self->key_to_texture_id, g_hash_table_unref);
   g_clear_pointer (&self->textures, g_hash_table_unref);
   g_clear_pointer (&self->key_to_texture_id, g_hash_table_unref);
@@ -192,13 +179,13 @@ static void
 gsk_next_driver_init (GskNextDriver *self)
 {
   self->autorelease_framebuffers = g_array_new (FALSE, FALSE, sizeof (guint));
-  self->autorelease_textures = g_array_new (FALSE, FALSE, sizeof (guint));
   self->textures = g_hash_table_new_full (NULL, NULL, NULL, gsk_gl_texture_free);
   self->texture_id_to_key = g_hash_table_new (NULL, NULL);
   self->key_to_texture_id = g_hash_table_new_full (texture_key_hash,
                                                    texture_key_equal,
                                                    g_free,
                                                    NULL);
+  gsk_gl_texture_pool_init (&self->texture_pool);
 }
 
 static gboolean
@@ -269,6 +256,15 @@ failure:
   return ret;
 }
 
+void
+gsk_next_driver_autorelease_framebuffer (GskNextDriver *self,
+                                         guint          framebuffer_id)
+{
+  g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
+
+  g_array_append_val (self->autorelease_framebuffers, framebuffer_id);
+}
+
 GskNextDriver *
 gsk_next_driver_new (GskGLCommandQueue  *command_queue,
                      gboolean            debug,
@@ -336,19 +332,14 @@ gsk_next_driver_end_frame (GskNextDriver *self)
   gsk_gl_texture_library_end_frame (GSK_GL_TEXTURE_LIBRARY (self->glyphs));
   gsk_gl_texture_library_end_frame (GSK_GL_TEXTURE_LIBRARY (self->shadows));
 
-  if (self->autorelease_textures->len > 0)
-    {
-      glDeleteTextures (self->autorelease_textures->len,
-                        (GLuint *)(gpointer)self->autorelease_textures->data);
-      self->autorelease_textures->len = 0;
-    }
-
   if (self->autorelease_framebuffers->len > 0)
     {
       glDeleteFramebuffers (self->autorelease_framebuffers->len,
                             (GLuint *)(gpointer)self->autorelease_framebuffers->data);
       self->autorelease_framebuffers->len = 0;
     }
+
+  gsk_gl_texture_pool_clear (&self->texture_pool);
 
   self->in_frame = FALSE;
 }
@@ -362,6 +353,20 @@ gsk_next_driver_get_context (GskNextDriver *self)
   return gsk_gl_command_queue_get_context (self->command_queue);
 }
 
+/**
+ * gsk_next_driver_create_render_target:
+ * @self: a #GskNextDriver
+ * @width: the width for the render target
+ * @height: the height for the render target
+ * @out_fbo_id: (out): location for framebuffer id
+ * @out_texture_id: (out): location for texture id
+ *
+ * Creates a new render target where @out_texture_id is bount
+ * to the framebuffer @out_fbo_id using glFramebufferTexture2D().
+ *
+ * Returns: %TRUE if successful; otherwise %FALSE and @out_fbo_id and
+ *   @out_texture_id are undefined.
+ */
 gboolean
 gsk_next_driver_create_render_target (GskNextDriver *self,
                                       int            width,
@@ -370,9 +375,7 @@ gsk_next_driver_create_render_target (GskNextDriver *self,
                                       guint         *out_texture_id)
 {
   g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), FALSE);
-
-  if (self->command_queue == NULL)
-    return FALSE;
+  g_return_val_if_fail (GSK_IS_GL_COMMAND_QUEUE (self->command_queue), FALSE);
 
   return gsk_gl_command_queue_create_render_target (self->command_queue,
                                                     width,
@@ -381,28 +384,20 @@ gsk_next_driver_create_render_target (GskNextDriver *self,
                                                     out_texture_id);
 }
 
-void
-gsk_next_driver_autorelease_texture (GskNextDriver *self,
-                                     guint          texture_id)
-{
-  g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
-
-  g_array_append_val (self->autorelease_textures, texture_id);
-}
-
-void
-gsk_next_driver_autorelease_framebuffer (GskNextDriver *self,
-                                         guint          framebuffer_id)
-{
-  g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
-
-  g_array_append_val (self->autorelease_framebuffers, framebuffer_id);
-}
-
-gboolean
+/**
+ * gsk_next_driver_lookup_texture:
+ * @self: a #GskNextDriver
+ * @key: the key for the texture
+ *
+ * Looks up a texture in the texture cache by @key.
+ *
+ * If the texture could not be found, then zero is returned.
+ *
+ * Returns: a positive integer if the texture was found; otherwise 0.
+ */
+guint
 gsk_next_driver_lookup_texture (GskNextDriver       *self,
-                                const GskTextureKey *key,
-                                guint               *texture_id)
+                                const GskTextureKey *key)
 {
   gpointer id;
 
@@ -411,28 +406,35 @@ gsk_next_driver_lookup_texture (GskNextDriver       *self,
 
   if (g_hash_table_lookup_extended (self->key_to_texture_id, key, NULL, &id))
     {
-      GskGLTexture *texture;
-
-      g_assert (id != NULL);
-
-      if (texture_id != NULL)
-        *texture_id = GPOINTER_TO_UINT (id);
-
-      texture = g_hash_table_lookup (self->textures, id);
+      GskGLTexture *texture = g_hash_table_lookup (self->textures, id);
 
       if (texture != NULL)
         texture->last_used_in_frame = self->current_frame_id;
 
-      return TRUE;
+      return GPOINTER_TO_UINT (id);
     }
 
-  return FALSE;
+  return 0;
 }
 
+/**
+ * gsk_next_driver_cache_texture:
+ * @self: a #GskNextDriver
+ * @key: the key for the texture
+ * @texture_id: the id of the texture to be cached
+ *
+ * Inserts @texture_id into the texture cache using @key.
+ *
+ * Textures can be looked up by @key after calling this function using
+ * gsk_next_driver_lookup_texture().
+ *
+ * Textures that have not been used within a number of frames will be
+ * purged from the texture cache automatically.
+ */
 void
-gsk_next_driver_insert_texture (GskNextDriver       *self,
-                                const GskTextureKey *key,
-                                guint                texture_id)
+gsk_next_driver_cache_texture (GskNextDriver       *self,
+                               const GskTextureKey *key,
+                               guint                texture_id)
 {
   GskTextureKey *k;
 
@@ -446,6 +448,29 @@ gsk_next_driver_insert_texture (GskNextDriver       *self,
   g_hash_table_insert (self->texture_id_to_key, GUINT_TO_POINTER (texture_id), k);
 }
 
+/**
+ * gsk_next_driver_load_texture:
+ * @self: a #GdkTexture
+ * @texture: a #GdkTexture
+ * @min_filter: GL_NEAREST or GL_LINEAR
+ * @mag_filter: GL_NEAREST or GL_LINEAR
+ *
+ * Loads a #GdkTexture by uploading the contents to the GPU when
+ * necessary. If @texture is a #GdkGLTexture, it can be used without
+ * uploading contents to the GPU.
+ *
+ * If the texture has already been uploaded and not yet released
+ * from cache, this function returns that texture id without further
+ * work.
+ *
+ * If the texture has not been used for a number of frames, it will
+ * be removed from cache.
+ *
+ * There is no need to release the resulting texture identifier after
+ * using it. It will be released automatically.
+ *
+ * Returns: a texture identifier
+ */
 guint
 gsk_next_driver_load_texture (GskNextDriver *self,
                               GdkTexture    *texture,
@@ -495,15 +520,10 @@ gsk_next_driver_load_texture (GskNextDriver *self,
           source_texture = downloaded_texture;
         }
     }
-  else
+  else if ((t = gdk_texture_get_render_data (texture, self)))
     {
-      t = gdk_texture_get_render_data (texture, self);
-
-      if (t)
-        {
-          if (t->min_filter == min_filter && t->mag_filter == mag_filter)
-            return t->texture_id;
-        }
+      if (t->min_filter == min_filter && t->mag_filter == mag_filter)
+        return t->texture_id;
 
       source_texture = texture;
     }
@@ -523,7 +543,7 @@ gsk_next_driver_load_texture (GskNextDriver *self,
                                                        t->min_filter,
                                                        t->mag_filter);
 
-  if (gdk_texture_set_render_data (texture, self, t, gsk_next_driver_release_texture))
+  if (gdk_texture_set_render_data (texture, self, t, gsk_gl_texture_destroyed))
     t->user = texture;
 
   gdk_gl_context_label_object_printf (context, GL_TEXTURE, t->texture_id,
@@ -532,4 +552,96 @@ gsk_next_driver_load_texture (GskNextDriver *self,
   g_clear_object (&downloaded_texture);
 
   return t->texture_id;
+}
+
+/**
+ * gsk_next_driver_create_texture:
+ * @self: a #GskNextDriver
+ * @width: the width of the texture
+ * @height: the height of the texture
+ * @min_filter: GL_NEAREST or GL_LINEAR
+ * @mag_filter: GL_NEAREST or GL_FILTER
+ *
+ * Creates a new texture immediately that can be used by the caller
+ * to upload data, map to a framebuffer, or other uses which may
+ * modify the texture immediately.
+ *
+ * Use this instead of gsk_next_driver_acquire_texture() when you need
+ * to be able to modify the texture immediately instead of just when the
+ * pipeline is executing. Otherwise, gsk_next_driver_acquire_texture()
+ * provides more chances for re-use of textures, reducing the VRAM overhead
+ * on the GPU.
+ *
+ * Use gsk_next_driver_release_texture() to release this texture back into
+ * the pool so it may be reused later in the pipeline.
+ *
+ * Returns: a #GskGLTexture which can be returned to the pool with
+ *   gsk_next_driver_release_texture().
+ */
+GskGLTexture *
+gsk_next_driver_create_texture (GskNextDriver *self,
+                                float          width,
+                                float          height,
+                                int            min_filter,
+                                int            mag_filter)
+{
+  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), NULL);
+
+  return gsk_gl_texture_pool_get (&self->texture_pool,
+                                  width, height,
+                                  min_filter, mag_filter,
+                                  TRUE);
+}
+
+/**
+ * gsk_next_driver_acquire_texture:
+ * @self: a #GskNextDriver
+ * @width: the min width of the texture necessary
+ * @height: the min height of the texture necessary
+ * @min_filter: GL_NEAREST or GL_LINEAR
+ * @mag_filter: GL_NEAREST or GL_LINEAR
+ *
+ * This function acquires a #GskGLTexture from the texture pool. Doing
+ * so increases the chances for reduced VRAM usage in the GPU by having
+ * fewer textures in use at one time. Batches later in the stream can
+ * use the same texture memory of a previous batch.
+ *
+ * Consumers of this function are not allowed to modify @texture
+ * immediately, it must wait until batches are being processed as
+ * the texture may contain contents used earlier in the pipeline.
+ *
+ * Returns: a #GskGLTexture that may be returned to the pool with
+ *   gsk_next_driver_release_texture().
+ */
+GskGLTexture *
+gsk_next_driver_acquire_texture (GskNextDriver *self,
+                                 float          width,
+                                 float          height,
+                                 int            min_filter,
+                                 int            mag_filter)
+{
+  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), NULL);
+
+  return gsk_gl_texture_pool_get (&self->texture_pool,
+                                  width, height,
+                                  min_filter, mag_filter,
+                                  FALSE);
+}
+
+/**
+ * gsk_gl_driver_release_texture:
+ * @self: a #GskNextDriver
+ * @texture: a #GskGLTexture
+ *
+ * Releases @texture back into the pool so that it can be used later
+ * in the command stream by future batches. This helps reduce VRAM
+ * usage on the GPU.
+ */
+void
+gsk_next_driver_release_texture (GskNextDriver *self,
+                                 GskGLTexture  *texture)
+{
+  g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
+
+  gsk_gl_texture_pool_put (&self->texture_pool, texture);
 }
