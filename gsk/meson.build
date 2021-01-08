@@ -62,6 +62,7 @@ gsk_private_sources = files([
   'next/gskgltextureatlas.c',
   'next/gskgltexturelibrary.c',
   'next/gskgluniformstate.c',
+  'next/gskgltexturepool.c',
 ])
 
 gsk_public_headers = files([
