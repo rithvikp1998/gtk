@@ -36,6 +36,10 @@
 #define ORTHO_NEAR_PLANE   -10000
 #define ORTHO_FAR_PLANE     10000
 #define MAX_GRADIENT_STOPS  6
+#define X1(r) ((r)->origin.x)
+#define X2(r) ((r)->origin.x + (r)->size.width)
+#define Y1(r) ((r)->origin.y)
+#define Y2(r) ((r)->origin.y + (r)->size.height)
 
 
 #define rounded_rect_top_left(r)                                                        \
@@ -754,39 +758,39 @@ gsk_gl_render_job_draw_from_offscreen (GskGLRenderJob        *job,
   float min_y = job->offset_y + bounds->origin.y;
   float max_x = min_x + bounds->size.width;
   float max_y = min_y + bounds->size.height;
-  float y1 = offscreen->flip_y ? offscreen->y2 : offscreen->y;
-  float y2 = offscreen->flip_y ? offscreen->y  : offscreen->y2;
+  float y1 = offscreen->flip_y ? Y2 (&offscreen->area) : Y1 (&offscreen->area);
+  float y2 = offscreen->flip_y ? Y1 (&offscreen->area) : Y2 (&offscreen->area);
 
   vertices = gsk_gl_command_queue_add_vertices (job->command_queue, NULL);
 
   vertices[0].position[0] = min_x;
   vertices[0].position[1] = min_y;
-  vertices[0].uv[0] = offscreen->x;
+  vertices[0].uv[0] = X1 (&offscreen->area);
   vertices[0].uv[1] = y1;
 
   vertices[1].position[0] = min_x;
   vertices[1].position[1] = max_y;
-  vertices[1].uv[0] = offscreen->x;
+  vertices[1].uv[0] = X1 (&offscreen->area);
   vertices[1].uv[1] = y2;
 
   vertices[2].position[0] = max_x;
   vertices[2].position[1] = min_y;
-  vertices[2].uv[0] = offscreen->x2;
+  vertices[2].uv[0] = X2 (&offscreen->area);
   vertices[2].uv[1] = y1;
 
   vertices[3].position[0] = max_x;
   vertices[3].position[1] = max_y;
-  vertices[3].uv[0] = offscreen->x2;
+  vertices[3].uv[0] = X2 (&offscreen->area);
   vertices[3].uv[1] = y2;
 
   vertices[4].position[0] = min_x;
   vertices[4].position[1] = max_y;
-  vertices[4].uv[0] = offscreen->x;
+  vertices[4].uv[0] = X1 (&offscreen->area);
   vertices[4].uv[1] = y2;
 
   vertices[5].position[0] = max_x;
   vertices[5].position[1] = min_y;
-  vertices[5].uv[0] = offscreen->x2;
+  vertices[5].uv[0] = X2 (&offscreen->area);
   vertices[5].uv[1] = y1;
 }
 
@@ -1842,9 +1846,9 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
       /* Just to be safe. */
       offscreen->texture_id = 0;
       offscreen->area.origin.x = 0;
-      offscreen->area.size.width = 1;
       offscreen->area.origin.y = 0;
-      offscreen->area.origin.width = 1;
+      offscreen->area.size.width = 1;
+      offscreen->area.size.height = 1;
       return FALSE;
     }
 
@@ -1858,7 +1862,7 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
                                       texture,
                                       GL_LINEAR,
                                       GL_LINEAR,
-                                      &offscreen.area);
+                                      &offscreen->area);
     }
 
   return FALSE;
