@@ -449,8 +449,8 @@ gsk_gl_render_job_push_modelview (GskGLRenderJob *job,
 
   job->offset_x = 0;
   job->offset_y = 0;
-  job->scale_x = job->scale_x;
-  job->scale_y = job->scale_y;
+  job->scale_x = modelview->scale_x;
+  job->scale_y = modelview->scale_y;
 }
 
 static void
