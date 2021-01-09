@@ -985,19 +985,17 @@ static void
 gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
                                            GskRenderNode  *node)
 {
-  const GskRoundedRect *clip;
-  GskRenderNode *child;
+  GskRenderNode *child = gsk_rounded_clip_node_get_child (node);
+  const GskRoundedRect *clip = gsk_rounded_clip_node_get_clip (node);
   GskRoundedRect current_clip;
   GskRoundedRect transformed_clip;
   float scale_x = job->scale_x;
   float scale_y = job->scale_y;
   gboolean need_offscreen;
 
-  child = gsk_rounded_clip_node_get_child (node);
   if (node_is_invisible (child))
     return;
 
-  clip = gsk_rounded_clip_node_get_clip (node);
   current_clip = *gsk_gl_render_job_get_clip (job);
 
   gsk_gl_render_job_transform_bounds (job, &clip->bounds, &transformed_clip.bounds);
