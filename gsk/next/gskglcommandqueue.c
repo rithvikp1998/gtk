@@ -165,7 +165,7 @@ G_STATIC_ASSERT (sizeof (GskGLCommandBatch) == 32);
 
 G_DEFINE_TYPE (GskGLCommandQueue, gsk_gl_command_queue, G_TYPE_OBJECT)
 
-static void
+static inline void
 gsk_gl_command_queue_capture_png (GskGLCommandQueue *self,
                                   const char        *filename,
                                   guint              width,
