@@ -166,6 +166,30 @@ G_STATIC_ASSERT (sizeof (GskGLCommandBatch) == 32);
 G_DEFINE_TYPE (GskGLCommandQueue, gsk_gl_command_queue, G_TYPE_OBJECT)
 
 static void
+gsk_gl_command_queue_capture_png (GskGLCommandQueue *self,
+                                  const char        *filename,
+                                  guint              width,
+                                  guint              height)
+{
+  cairo_surface_t *surface;
+  gpointer data;
+  guint stride;
+
+  g_assert (GSK_IS_GL_COMMAND_QUEUE (self));
+  g_assert (filename != NULL);
+
+  stride = cairo_format_stride_for_width (CAIRO_FORMAT_ARGB32, width);
+  data = g_malloc_n (height, stride);
+
+  glReadPixels (0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, data);
+  surface = cairo_image_surface_create_for_data (data, CAIRO_FORMAT_ARGB32, width, height, stride);
+  cairo_surface_write_to_png (surface, filename);
+
+  cairo_surface_destroy (surface);
+  g_free (data);
+}
+
+static void
 gsk_gl_command_queue_save (GskGLCommandQueue *self)
 {
   g_assert (GSK_IS_GL_COMMAND_QUEUE (self));
@@ -631,6 +655,7 @@ gsk_gl_command_queue_execute (GskGLCommandQueue *self)
   guint program = 0;
   guint16 width = 0;
   guint16 height = 0;
+  guint count = 0;
 
   g_return_if_fail (GSK_IS_GL_COMMAND_QUEUE (self));
   g_return_if_fail (self->in_draw == FALSE);
@@ -675,6 +700,8 @@ gsk_gl_command_queue_execute (GskGLCommandQueue *self)
       const GskGLCommandBatch *batch = &g_array_index (self->batches, GskGLCommandBatch, next_batch_index);
 
       g_assert (batch->any.next_batch_index != next_batch_index);
+
+      count++;
 
       switch (batch->any.kind)
         {
@@ -751,6 +778,18 @@ gsk_gl_command_queue_execute (GskGLCommandQueue *self)
         default:
           g_assert_not_reached ();
         }
+
+#if 0
+      if (batch->any.kind == GSK_GL_COMMAND_KIND_DRAW ||
+          batch->any.kind == GSK_GL_COMMAND_KIND_CLEAR)
+        {
+          char filename[32];
+          g_snprintf (filename, sizeof filename,
+                      "capture%u_batch%d_kind%u.png",
+                      count++, next_batch_index, batch->any.kind);
+          gsk_gl_command_queue_capture_png (self, filename, width, height);
+        }
+#endif
 
       next_batch_index = batch->any.next_batch_index;
     }
