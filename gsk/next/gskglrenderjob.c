@@ -1268,10 +1268,9 @@ gsk_gl_render_job_visit_border_node (GskGLRenderJob *job,
                                    UNIFORM_BORDER_WIDTHS,
                                    1,
                                    widths);
-    gsk_gl_program_set_uniform4fv (job->driver->border,
-                                   UNIFORM_BORDER_OUTLINE_RECT,
-                                   3,
-                                   (const float *)&outline.bounds);
+    gsk_gl_program_set_uniform_rounded_rect (job->driver->border,
+                                             UNIFORM_BORDER_OUTLINE_RECT,
+                                             &outline);
 
     for (guint i = 0; i < 4; i++)
       {
