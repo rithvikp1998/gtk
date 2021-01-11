@@ -546,7 +546,7 @@ gsk_gl_render_job_transform_bounds (GskGLRenderJob        *job,
   r.origin.x = rect->origin.x + job->offset_x;
   r.origin.y = rect->origin.y + job->offset_y;
   r.size.width = rect->size.width;
-  r.size.height = rect->size.width;
+  r.size.height = rect->size.height;
 
   modelview = gsk_gl_render_job_get_modelview (job);
 
