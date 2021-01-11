@@ -1125,6 +1125,9 @@ gsk_gl_render_job_visit_uniform_border_node (GskGLRenderJob *job,
   const GskRoundedRect *rounded_outline = gsk_border_node_get_outline (node);
   const GdkRGBA *colors = gsk_border_node_get_colors (node);
   const float *widths = gsk_border_node_get_widths (node);
+  GskRoundedRect outline;
+
+  gsk_gl_render_job_transform_rounded_rect (job, rounded_outline, &outline);
 
   gsk_gl_program_begin_draw (job->driver->inset_shadow,
                              &job->viewport,
@@ -1134,7 +1137,7 @@ gsk_gl_render_job_visit_uniform_border_node (GskGLRenderJob *job,
                              job->alpha);
   gsk_gl_program_set_uniform_rounded_rect (job->driver->inset_shadow,
                                            UNIFORM_INSET_SHADOW_OUTLINE_RECT,
-                                           rounded_outline);
+                                           &outline);
   gsk_gl_program_set_uniform_color (job->driver->inset_shadow,
                                     UNIFORM_INSET_SHADOW_COLOR,
                                     &colors[0]);
