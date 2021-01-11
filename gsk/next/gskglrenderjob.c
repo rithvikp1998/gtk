@@ -1735,6 +1735,7 @@ gsk_gl_render_job_visit_opacity_node (GskGLRenderJob *job,
        * color nodes overlap, there may not be any blending between them.
        */
 
+      offscreen.bounds = &child->bounds;
       offscreen.force_offscreen = TRUE;
       offscreen.reset_clip = TRUE;
 
