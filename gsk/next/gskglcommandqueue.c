@@ -715,7 +715,7 @@ gsk_gl_command_queue_execute (GskGLCommandQueue *self)
           apply_viewport (&width,
                           &height,
                           batch->any.viewport.width,
-                          batch->any.viewport.width);
+                          batch->any.viewport.height);
 
           glClear (batch->clear.bits);
         break;
@@ -744,7 +744,7 @@ gsk_gl_command_queue_execute (GskGLCommandQueue *self)
           apply_viewport (&width,
                           &height,
                           batch->any.viewport.width,
-                          batch->any.viewport.width);
+                          batch->any.viewport.height);
 
           if G_UNLIKELY (batch->draw.bind_count > 0)
             {
