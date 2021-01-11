@@ -667,44 +667,32 @@ gsk_gl_render_job_draw_coords (GskGLRenderJob *job,
   vertices[0].position[0] = min_x;
   vertices[0].position[1] = min_y;
   vertices[0].uv[0] = 0;
-  vertices[0].uv[1] = 0;
+  vertices[0].uv[1] = 1;
 
   vertices[1].position[0] = min_x;
   vertices[1].position[1] = max_y;
   vertices[1].uv[0] = 0;
-  vertices[1].uv[1] = 1;
+  vertices[1].uv[1] = 0;
 
   vertices[2].position[0] = max_x;
   vertices[2].position[1] = min_y;
   vertices[2].uv[0] = 1;
-  vertices[2].uv[1] = 0;
+  vertices[2].uv[1] = 1;
 
   vertices[3].position[0] = max_x;
   vertices[3].position[1] = max_y;
   vertices[3].uv[0] = 1;
-  vertices[3].uv[1] = 1;
+  vertices[3].uv[1] = 0;
 
   vertices[4].position[0] = min_x;
   vertices[4].position[1] = max_y;
   vertices[4].uv[0] = 0;
-  vertices[4].uv[1] = 1;
+  vertices[4].uv[1] = 0;
 
   vertices[5].position[0] = max_x;
   vertices[5].position[1] = min_y;
   vertices[5].uv[0] = 1;
-  vertices[5].uv[1] = 0;
-}
-
-static void
-gsk_gl_render_job_draw_rect (GskGLRenderJob        *job,
-                             const graphene_rect_t *rect)
-{
-  float min_x = job->offset_x + rect->origin.x;
-  float min_y = job->offset_y + rect->origin.y;
-  float max_x = min_x + rect->size.width;
-  float max_y = min_y + rect->size.height;
-
-  gsk_gl_render_job_draw_coords (job, min_x, min_y, max_x, max_y);
+  vertices[5].uv[1] = 1;
 }
 
 static void
@@ -720,6 +708,17 @@ gsk_gl_render_job_draw (GskGLRenderJob *job,
   float max_y = min_y + height;
 
   gsk_gl_render_job_draw_coords (job, min_x, min_y, max_x, max_y);
+}
+
+static inline void
+gsk_gl_render_job_draw_rect (GskGLRenderJob        *job,
+                             const graphene_rect_t *bounds)
+{
+  gsk_gl_render_job_draw (job,
+                          bounds->origin.x,
+                          bounds->origin.y,
+                          bounds->size.width,
+                          bounds->size.height);
 }
 
 static void
@@ -769,18 +768,6 @@ gsk_gl_render_job_draw_from_offscreen (GskGLRenderJob        *job,
 }
 
 static void
-gsk_gl_render_job_draw_offscren_rect (GskGLRenderJob        *job,
-                                      const graphene_rect_t *bounds)
-{
-  float min_x = job->offset_x + bounds->origin.x;
-  float min_y = job->offset_y + bounds->origin.y;
-  float max_x = min_x + bounds->size.width;
-  float max_y = min_y + bounds->size.height;
-
-  gsk_gl_render_job_draw_coords (job, min_x, min_y, max_x, max_y);
-}
-
-static void
 gsk_gl_render_job_visit_as_fallback (GskGLRenderJob *job,
                                      GskRenderNode  *node)
 {
@@ -819,7 +806,7 @@ gsk_gl_render_job_visit_as_fallback (GskGLRenderJob *job,
       gsk_gl_program_set_uniform_texture (job->driver->blit,
                                           UNIFORM_SHARED_SOURCE,
                                           GL_TEXTURE_2D, GL_TEXTURE0, cached_id);
-      gsk_gl_render_job_draw_offscren_rect (job, &node->bounds);
+      gsk_gl_render_job_draw_rect (job, &node->bounds);
       gsk_gl_program_end_draw (job->driver->blit);
       return;
     }
@@ -878,7 +865,11 @@ gsk_gl_render_job_visit_as_fallback (GskGLRenderJob *job,
 
   /* Create texture to upload */
   texture = gdk_texture_new_for_surface (surface);
-  texture_id = gsk_next_driver_load_texture (job->driver, texture, GL_NEAREST, GL_NEAREST, &area);
+  texture_id = gsk_next_driver_load_texture (job->driver,
+                                             texture,
+                                             GL_NEAREST,
+                                             GL_NEAREST,
+                                             &area);
 
   if (gdk_gl_context_has_debug (job->command_queue->context))
     gdk_gl_context_label_object_printf (job->command_queue->context, GL_TEXTURE, texture_id,
@@ -898,7 +889,7 @@ gsk_gl_render_job_visit_as_fallback (GskGLRenderJob *job,
                              gsk_gl_render_job_get_modelview_matrix (job),
                              gsk_gl_render_job_get_clip (job),
                              job->alpha);
-  gsk_gl_render_job_draw_offscren_rect (job, &area);
+  gsk_gl_render_job_draw_rect (job, &area);
   gsk_gl_program_end_draw (job->driver->blit);
 }
 
