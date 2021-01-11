@@ -109,7 +109,7 @@ typedef struct _GskGLRenderOffscreen
   guint do_not_cache : 1;
   guint linear_filter : 1;
   guint flip_y : 1;
-  guint autorelease : 1;
+  guint was_offscreen : 1;
 } GskGLRenderOffscreen;
 
 static void     gsk_gl_render_job_visit_node                (GskGLRenderJob       *job,
@@ -117,6 +117,15 @@ static void     gsk_gl_render_job_visit_node                (GskGLRenderJob     
 static gboolean gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
                                                              GskRenderNode        *node,
                                                              GskGLRenderOffscreen *offscreen);
+
+static inline void
+init_full_texture_region (graphene_rect_t *rect)
+{
+  rect->origin.x = 0;
+  rect->origin.y = 0;
+  rect->size.width = 1;
+  rect->size.height = 1;
+}
 
 static inline gboolean G_GNUC_PURE
 node_is_invisible (const GskRenderNode *node)
@@ -1671,12 +1680,10 @@ gsk_gl_render_job_visit_cross_fade_node (GskGLRenderJob *job,
   offscreen_start.force_offscreen = TRUE;
   offscreen_start.reset_clip = TRUE;
   offscreen_start.bounds = &node->bounds;
-  offscreen_start.autorelease = TRUE;
 
   offscreen_end.force_offscreen = TRUE;
   offscreen_end.reset_clip = TRUE;
   offscreen_end.bounds = &node->bounds;
-  offscreen_end.autorelease = TRUE;
 
   if (!gsk_gl_render_job_visit_node_with_offscreen (job, start_node, &offscreen_start))
     {
@@ -1731,7 +1738,6 @@ gsk_gl_render_job_visit_opacity_node (GskGLRenderJob *job,
 
       offscreen.force_offscreen = TRUE;
       offscreen.reset_clip = TRUE;
-      offscreen.autorelease = TRUE;
 
       gsk_gl_render_job_visit_node_with_offscreen (job, child, &offscreen);
 
@@ -2022,19 +2028,22 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
                                              GskRenderNode        *node,
                                              GskGLRenderOffscreen *offscreen)
 {
+  GskTextureKey key;
+  guint cached_id;
+  int filter;
+
   g_assert (job != NULL);
   g_assert (node != NULL);
   g_assert (offscreen != NULL);
   g_assert (offscreen->texture_id == 0);
+  g_assert (offscreen->bounds != NULL);
 
   if (node_is_invisible (node))
     {
       /* Just to be safe. */
       offscreen->texture_id = 0;
-      offscreen->area.origin.x = 0;
-      offscreen->area.origin.y = 0;
-      offscreen->area.size.width = 1;
-      offscreen->area.size.height = 1;
+      init_full_texture_region (&offscreen->area);
+      offscreen->was_offscreen = FALSE;
       return FALSE;
     }
 
@@ -2043,17 +2052,36 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
     {
       GdkTexture *texture = gsk_texture_node_get_texture (node);
 
-      offscreen->texture_id =
-        gsk_next_driver_load_texture (job->driver, texture,
-                                      GL_LINEAR, GL_LINEAR);
+      init_full_texture_region (&offscreen->area);
+      offscreen->was_offscreen = FALSE;
+      offscreen->texture_id = gsk_next_driver_load_texture (job->driver,
+                                                            texture,
+                                                            GL_LINEAR,
+                                                            GL_LINEAR);
 
-      offscreen->area.origin.x = 0;
-      offscreen->area.origin.y = 0;
-      offscreen->area.size.width = 0;
-      offscreen->area.size.height = 0;
+      return TRUE;
     }
 
-  /* TODO: */ 
+  filter = offscreen->linear_filter ? GL_LINEAR : GL_NEAREST;
+
+  /* Check if we've already cached the drawn texture. */
+  key.pointer = node;
+  key.pointer_is_child = TRUE; /* Don't conflict with the child using the cache too */
+  key.parent_rect = *offscreen->bounds;
+  key.scale_x = job->scale_x;
+  key.scale_y = job->scale_y;
+  key.filter = filter;
+
+  cached_id = gsk_next_driver_lookup_texture (job->driver, &key);
+
+  if (cached_id != 0)
+    {
+      offscreen->texture_id = cached_id;
+      init_full_texture_region (&offscreen->area);
+      /* We didn't render it offscreen, but hand out an offscreen texture id */
+      offscreen->was_offscreen = TRUE;
+      return TRUE;
+    }
 
   return FALSE;
 }
