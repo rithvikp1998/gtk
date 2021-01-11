@@ -837,10 +837,12 @@ gsk_gl_render_job_visit_linear_gradient_node (GskGLRenderJob *job,
                                  (const float *)stops);
   gsk_gl_program_set_uniform2f (job->driver->linear_gradient,
                                 UNIFORM_LINEAR_GRADIENT_START_POINT,
-                                start->x, start->y);
+                                job->offset_x + start->x,
+                                job->offset_y + start->y);
   gsk_gl_program_set_uniform2f (job->driver->linear_gradient,
                                 UNIFORM_LINEAR_GRADIENT_END_POINT,
-                                end->x, end->y);
+                                job->offset_x + end->x,
+                                job->offset_y + end->y);
   gsk_gl_render_job_draw_rect (job, &node->bounds);
   gsk_gl_program_end_draw (job->driver->linear_gradient);
 }
