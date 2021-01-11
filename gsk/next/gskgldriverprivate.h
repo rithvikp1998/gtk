@@ -113,8 +113,7 @@ void           gsk_next_driver_cache_texture           (GskNextDriver        *se
 guint          gsk_next_driver_load_texture            (GskNextDriver        *self,
                                                         GdkTexture           *texture,
                                                         int                   min_filter,
-                                                        int                   mag_filter,
-                                                        graphene_rect_t      *area);
+                                                        int                   mag_filter);
 GskGLTexture  *gsk_next_driver_create_texture          (GskNextDriver        *self,
                                                         float                 width,
                                                         float                 height,

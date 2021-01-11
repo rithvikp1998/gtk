@@ -42,13 +42,6 @@
 
 G_DEFINE_TYPE (GskNextDriver, gsk_next_driver, G_TYPE_OBJECT)
 
-static inline gboolean
-size_can_be_atlased (float width,
-                     float height)
-{
-  return width < 128 && height < 128;
-}
-
 static guint
 texture_key_hash (gconstpointer v)
 {
@@ -486,8 +479,6 @@ gsk_next_driver_cache_texture (GskNextDriver       *self,
  * @texture: a #GdkTexture
  * @min_filter: GL_NEAREST or GL_LINEAR
  * @mag_filter: GL_NEAREST or GL_LINEAR
- * @area: (out): a #graphene_rect_t containing the area within the texture
- *   containing the contents that were uploaded.
  *
  * Loads a #GdkTexture by uploading the contents to the GPU when
  * necessary. If @texture is a #GdkGLTexture, it can be used without
@@ -509,8 +500,7 @@ guint
 gsk_next_driver_load_texture (GskNextDriver   *self,
                               GdkTexture      *texture,
                               int              min_filter,
-                              int              mag_filter,
-                              graphene_rect_t *area)
+                              int              mag_filter)
 {
   GdkGLContext *context;
   GdkTexture *downloaded_texture = NULL;
@@ -522,7 +512,6 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
   g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), 0);
   g_return_val_if_fail (GDK_IS_TEXTURE (texture), 0);
   g_return_val_if_fail (GSK_IS_GL_COMMAND_QUEUE (self->command_queue), 0);
-  g_return_val_if_fail (area != NULL, 0);
 
   context = self->command_queue->context;
 
@@ -537,8 +526,6 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
 
         {
           /* A GL texture from the same GL context is a simple task... */
-          area->origin.x = area->origin.y = 0;
-          area->size.width = area->size.height = 1;
           return gdk_gl_texture_get_id ((GdkGLTexture *)texture);
         }
       else
@@ -565,11 +552,7 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
       if ((t = gdk_texture_get_render_data (texture, self)))
         {
           if (t->min_filter == min_filter && t->mag_filter == mag_filter)
-            {
-              area->origin.x = area->origin.y = 0;
-              area->size.width = area->size.height = 1;
-              return t->texture_id;
-            }
+            return t->texture_id;
         }
 
       source_texture = texture;
@@ -577,25 +560,6 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
 
   width = gdk_texture_get_width (texture);
   height = gdk_texture_get_height (texture);
-
-  if (size_can_be_atlased (width, height))
-    {
-      GskGLTextureAtlas *atlas;
-
-      if (gsk_gl_texture_library_lookup (GSK_GL_TEXTURE_LIBRARY (self->icons),
-                                         texture, &atlas, area))
-        return atlas->texture_id;
-
-      if (gsk_gl_texture_library_pack (GSK_GL_TEXTURE_LIBRARY (self->icons),
-                                       texture, sizeof (void *),
-                                       width, height,
-                                       &atlas, area))
-        {
-          gsk_gl_texture_library_upload (GSK_GL_TEXTURE_LIBRARY (self->icons),
-                                         atlas, area, texture);
-          return atlas->texture_id;
-        }
-    }
 
   t = g_slice_new0 (GskGLTexture);
   t->width = gdk_texture_get_width (texture);
@@ -614,9 +578,6 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
 
   if (gdk_texture_set_render_data (texture, self, t, gsk_gl_texture_destroyed))
     t->user = texture;
-
-  area->origin.x = area->origin.y = 0;
-  area->size.width = area->size.height = 1;
 
   gdk_gl_context_label_object_printf (context, GL_TEXTURE, t->texture_id,
                                       "GdkTexture<%p> %d", texture, t->texture_id);

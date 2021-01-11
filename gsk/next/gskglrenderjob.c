@@ -655,6 +655,109 @@ gsk_gl_render_job_node_overlaps_clip (GskGLRenderJob *job,
   return TRUE;
 }
 
+/* load_vertex_data_with_region */
+static inline void
+gsk_gl_render_job_load_vertices_from_offscreen (GskGLRenderJob             *job,
+                                                const graphene_rect_t      *bounds,
+                                                const GskGLRenderOffscreen *offscreen)
+{
+  GskGLDrawVertex *vertices = gsk_gl_command_queue_add_vertices (job->command_queue, NULL);
+  float min_x = job->offset_x + bounds->origin.x;
+  float min_y = job->offset_y + bounds->origin.y;
+  float max_x = min_x + bounds->size.width;
+  float max_y = min_y + bounds->size.height;
+  float y1 = offscreen->flip_y ? Y2 (&offscreen->area) : Y1 (&offscreen->area);
+  float y2 = offscreen->flip_y ? Y1 (&offscreen->area) : Y2 (&offscreen->area);
+
+  vertices[0].position[0] = min_x;
+  vertices[0].position[1] = min_y;
+  vertices[0].uv[0] = X1 (bounds);
+  vertices[0].uv[1] = y1;
+
+  vertices[1].position[0] = min_x;
+  vertices[1].position[1] = max_y;
+  vertices[1].uv[0] = X1 (bounds);
+  vertices[1].uv[1] = y2;
+
+  vertices[2].position[0] = max_x;
+  vertices[2].position[1] = min_y;
+  vertices[2].uv[0] = X2 (bounds);
+  vertices[2].uv[1] = y1;
+
+  vertices[3].position[0] = max_x;
+  vertices[3].position[1] = max_y;
+  vertices[3].uv[0] = X2 (bounds);
+  vertices[3].uv[1] = y2;
+
+  vertices[4].position[0] = min_x;
+  vertices[4].position[1] = max_y;
+  vertices[4].uv[0] = X1 (bounds);
+  vertices[4].uv[1] = y2;
+
+  vertices[5].position[0] = max_x;
+  vertices[5].position[1] = min_y;
+  vertices[5].uv[0] = X2 (bounds);
+  vertices[5].uv[1] = y1;
+}
+
+/* load_float_vertex_data */
+static inline void
+gsk_gl_render_job_draw (GskGLRenderJob *job,
+                        float           x,
+                        float           y,
+                        float           width,
+                        float           height)
+{
+  GskGLDrawVertex *vertices = gsk_gl_command_queue_add_vertices (job->command_queue, NULL);
+  float min_x = job->offset_x + x;
+  float min_y = job->offset_y + y;
+  float max_x = min_x + width;
+  float max_y = min_y + height;
+
+  vertices[0].position[0] = min_x;
+  vertices[0].position[1] = min_y;
+  vertices[0].uv[0] = 0;
+  vertices[0].uv[1] = 0;
+
+  vertices[1].position[0] = min_x;
+  vertices[1].position[1] = max_y;
+  vertices[1].uv[0] = 0;
+  vertices[1].uv[1] = 1;
+
+  vertices[2].position[0] = max_x;
+  vertices[2].position[1] = min_y;
+  vertices[2].uv[0] = 1;
+  vertices[2].uv[1] = 0;
+
+  vertices[3].position[0] = max_x;
+  vertices[3].position[1] = max_y;
+  vertices[3].uv[0] = 1;
+  vertices[3].uv[1] = 1;
+
+  vertices[4].position[0] = min_x;
+  vertices[4].position[1] = max_y;
+  vertices[4].uv[0] = 0;
+  vertices[4].uv[1] = 1;
+
+  vertices[5].position[0] = max_x;
+  vertices[5].position[1] = min_y;
+  vertices[5].uv[0] = 1;
+  vertices[5].uv[1] = 0;
+}
+
+/* load_vertex_data */
+static inline void
+gsk_gl_render_job_draw_rect (GskGLRenderJob        *job,
+                             const graphene_rect_t *bounds)
+{
+  gsk_gl_render_job_draw (job,
+                          bounds->origin.x,
+                          bounds->origin.y,
+                          bounds->size.width,
+                          bounds->size.height);
+}
+
+/* fill_vertex_data */
 static void
 gsk_gl_render_job_draw_coords (GskGLRenderJob *job,
                                float           min_x,
@@ -695,76 +798,17 @@ gsk_gl_render_job_draw_coords (GskGLRenderJob *job,
   vertices[5].uv[1] = 1;
 }
 
-static void
-gsk_gl_render_job_draw (GskGLRenderJob *job,
-                        float           x,
-                        float           y,
-                        float           width,
-                        float           height)
-{
-  float min_x = job->offset_x + x;
-  float min_y = job->offset_y + y;
-  float max_x = min_x + width;
-  float max_y = min_y + height;
-
-  gsk_gl_render_job_draw_coords (job, min_x, min_y, max_x, max_y);
-}
-
+/* load_offscreen_vertex_data */
 static inline void
-gsk_gl_render_job_draw_rect (GskGLRenderJob        *job,
-                             const graphene_rect_t *bounds)
+gsk_gl_render_job_draw_offscreen_rect (GskGLRenderJob        *job,
+                                       const graphene_rect_t *bounds)
 {
-  gsk_gl_render_job_draw (job,
-                          bounds->origin.x,
-                          bounds->origin.y,
-                          bounds->size.width,
-                          bounds->size.height);
-}
-
-static void
-gsk_gl_render_job_draw_from_offscreen (GskGLRenderJob        *job,
-                                       const graphene_rect_t *bounds,
-                                       GskGLRenderOffscreen  *offscreen)
-{
-  GskGLDrawVertex *vertices;
   float min_x = job->offset_x + bounds->origin.x;
   float min_y = job->offset_y + bounds->origin.y;
   float max_x = min_x + bounds->size.width;
   float max_y = min_y + bounds->size.height;
-  float y1 = offscreen->flip_y ? Y2 (&offscreen->area) : Y1 (&offscreen->area);
-  float y2 = offscreen->flip_y ? Y1 (&offscreen->area) : Y2 (&offscreen->area);
 
-  vertices = gsk_gl_command_queue_add_vertices (job->command_queue, NULL);
-
-  vertices[0].position[0] = min_x;
-  vertices[0].position[1] = min_y;
-  vertices[0].uv[0] = X1 (&offscreen->area);
-  vertices[0].uv[1] = y1;
-
-  vertices[1].position[0] = min_x;
-  vertices[1].position[1] = max_y;
-  vertices[1].uv[0] = X1 (&offscreen->area);
-  vertices[1].uv[1] = y2;
-
-  vertices[2].position[0] = max_x;
-  vertices[2].position[1] = min_y;
-  vertices[2].uv[0] = X2 (&offscreen->area);
-  vertices[2].uv[1] = y1;
-
-  vertices[3].position[0] = max_x;
-  vertices[3].position[1] = max_y;
-  vertices[3].uv[0] = X2 (&offscreen->area);
-  vertices[3].uv[1] = y2;
-
-  vertices[4].position[0] = min_x;
-  vertices[4].position[1] = max_y;
-  vertices[4].uv[0] = X1 (&offscreen->area);
-  vertices[4].uv[1] = y2;
-
-  vertices[5].position[0] = max_x;
-  vertices[5].position[1] = min_y;
-  vertices[5].uv[0] = X2 (&offscreen->area);
-  vertices[5].uv[1] = y1;
+  gsk_gl_render_job_draw_coords (job, min_x, min_y, max_x, max_y);
 }
 
 static void
@@ -779,7 +823,6 @@ gsk_gl_render_job_visit_as_fallback (GskGLRenderJob *job,
   cairo_surface_t *surface;
   cairo_surface_t *rendered_surface;
   cairo_t *cr;
-  graphene_rect_t area;
   int cached_id;
   int texture_id;
   GskTextureKey key;
@@ -806,7 +849,7 @@ gsk_gl_render_job_visit_as_fallback (GskGLRenderJob *job,
       gsk_gl_program_set_uniform_texture (job->driver->blit,
                                           UNIFORM_SHARED_SOURCE,
                                           GL_TEXTURE_2D, GL_TEXTURE0, cached_id);
-      gsk_gl_render_job_draw_rect (job, &node->bounds);
+      gsk_gl_render_job_draw_offscreen_rect (job, &node->bounds);
       gsk_gl_program_end_draw (job->driver->blit);
       return;
     }
@@ -865,11 +908,8 @@ gsk_gl_render_job_visit_as_fallback (GskGLRenderJob *job,
 
   /* Create texture to upload */
   texture = gdk_texture_new_for_surface (surface);
-  texture_id = gsk_next_driver_load_texture (job->driver,
-                                             texture,
-                                             GL_NEAREST,
-                                             GL_NEAREST,
-                                             &area);
+  texture_id = gsk_next_driver_load_texture (job->driver, texture,
+                                             GL_NEAREST, GL_NEAREST);
 
   if (gdk_gl_context_has_debug (job->command_queue->context))
     gdk_gl_context_label_object_printf (job->command_queue->context, GL_TEXTURE, texture_id,
@@ -889,7 +929,7 @@ gsk_gl_render_job_visit_as_fallback (GskGLRenderJob *job,
                              gsk_gl_render_job_get_modelview_matrix (job),
                              gsk_gl_render_job_get_clip (job),
                              job->alpha);
-  gsk_gl_render_job_draw_rect (job, &area);
+  gsk_gl_render_job_draw_offscreen_rect (job, &node->bounds);
   gsk_gl_program_end_draw (job->driver->blit);
 }
 
@@ -1706,7 +1746,7 @@ gsk_gl_render_job_visit_opacity_node (GskGLRenderJob *job,
                                           GL_TEXTURE_2D,
                                           GL_TEXTURE0,
                                           offscreen.texture_id);
-      gsk_gl_render_job_draw_from_offscreen (job, &node->bounds, &offscreen);
+      gsk_gl_render_job_load_vertices_from_offscreen (job, &node->bounds, &offscreen);
       gsk_gl_program_end_draw (job->driver->blit);
     }
   else
@@ -2004,12 +2044,16 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
       GdkTexture *texture = gsk_texture_node_get_texture (node);
 
       offscreen->texture_id =
-        gsk_next_driver_load_texture (job->driver,
-                                      texture,
-                                      GL_LINEAR,
-                                      GL_LINEAR,
-                                      &offscreen->area);
+        gsk_next_driver_load_texture (job->driver, texture,
+                                      GL_LINEAR, GL_LINEAR);
+
+      offscreen->area.origin.x = 0;
+      offscreen->area.origin.y = 0;
+      offscreen->area.size.width = 0;
+      offscreen->area.size.height = 0;
     }
+
+  /* TODO: */ 
 
   return FALSE;
 }
