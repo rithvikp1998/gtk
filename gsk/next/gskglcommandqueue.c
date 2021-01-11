@@ -378,6 +378,7 @@ gsk_gl_command_queue_end_draw (GskGLCommandQueue *self)
   if G_UNLIKELY (batch->draw.vbo_count == 0)
     {
       discard_batch (self);
+      self->in_draw = FALSE;
       return;
     }
 
