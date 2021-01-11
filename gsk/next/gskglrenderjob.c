@@ -79,7 +79,6 @@ struct _GskGLRenderJob
   float              offset_y;
   float              scale_x;
   float              scale_y;
-  guint              flip_y : 1;
 };
 
 typedef struct _GskGLRenderClip
@@ -288,8 +287,7 @@ intersect_rounded_rectilinear (const graphene_rect_t *non_rounded,
 
 static void
 init_projection_matrix (graphene_matrix_t     *projection,
-                        const graphene_rect_t *viewport,
-                        gboolean               flip_y)
+                        const graphene_rect_t *viewport)
 {
   graphene_matrix_init_ortho (projection,
                               viewport->origin.x,
@@ -298,9 +296,7 @@ init_projection_matrix (graphene_matrix_t     *projection,
                               viewport->origin.y + viewport->size.height,
                               ORTHO_NEAR_PLANE,
                               ORTHO_FAR_PLANE);
-
-  if (!flip_y)
-    graphene_matrix_scale (projection, 1, -1, 1);
+  graphene_matrix_scale (projection, 1, -1, 1);
 }
 
 static inline graphene_matrix_t *
@@ -569,8 +565,7 @@ gsk_gl_render_job_new (GskNextDriver         *driver,
                        const graphene_rect_t *viewport,
                        float                  scale_factor,
                        const cairo_region_t  *region,
-                       guint                  framebuffer,
-                       gboolean               flip_y)
+                       guint                  framebuffer)
 {
   const graphene_rect_t *clip_rect = viewport;
   graphene_rect_t transformed_extents;
@@ -592,10 +587,9 @@ gsk_gl_render_job_new (GskNextDriver         *driver,
   job->scale_y = scale_factor;
   job->viewport = *viewport;
   job->region = region ? cairo_region_copy (region) : NULL;
-  job->flip_y = !!flip_y;
   job->alpha = 1.0;
 
-  init_projection_matrix (&job->projection, viewport, flip_y);
+  init_projection_matrix (&job->projection, viewport);
   gsk_gl_render_job_set_modelview (job, gsk_transform_scale (NULL, scale_factor, scale_factor));
 
   /* Setup our initial clip. If region is NULL then we are drawing the
@@ -1083,7 +1077,7 @@ gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
 
       ops_pop_clip (builder);
 
-      ops_set_program (builder, &self->programs->blit_program);
+      ops_set_program (builder, &job->programs->blit_program);
       ops_set_texture (builder, region.texture_id);
 
       load_offscreen_vertex_data (ops_draw (builder, NULL), node, builder);
@@ -1864,6 +1858,79 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
     }
 
   return FALSE;
+}
+
+void
+gsk_gl_render_job_render_flipped (GskGLRenderJob *job,
+                                  GskRenderNode  *root)
+{
+  graphene_matrix_t proj;
+  GdkGLContext *context;
+  guint framebuffer_id;
+  guint texture_id;
+
+  g_return_if_fail (job != NULL);
+  g_return_if_fail (root != NULL);
+  g_return_if_fail (GSK_IS_NEXT_DRIVER (job->driver));
+
+  context = gsk_next_driver_get_context (job->driver);
+
+  gdk_gl_context_make_current (context);
+
+  graphene_matrix_init_ortho (&proj,
+                              job->viewport.origin.x,
+                              job->viewport.origin.x + job->viewport.size.width,
+                              job->viewport.origin.y,
+                              job->viewport.origin.y + job->viewport.size.height,
+                              ORTHO_NEAR_PLANE,
+                              ORTHO_FAR_PLANE);
+  graphene_matrix_scale (&proj, 1, -1, 1);
+
+  if (!gsk_gl_command_queue_create_render_target (job->command_queue,
+                                                  job->viewport.size.width,
+                                                  job->viewport.size.height,
+                                                  &framebuffer_id,
+                                                  &texture_id))
+    return;
+
+  gsk_next_driver_begin_frame (job->driver);
+
+  /* Setup drawing to our offscreen texture/framebuffer which is flipped */
+  gsk_gl_command_queue_bind_framebuffer (job->command_queue, framebuffer_id);
+  gsk_gl_command_queue_clear (job->command_queue, 0, &job->viewport);
+
+  /* Visit all nodes creating batches */
+  gdk_gl_context_push_debug_group (context, "Building command queue");
+  gsk_gl_render_job_visit_node (job, root);
+  gdk_gl_context_pop_debug_group (context);
+
+  /* Now draw to our real destination, but flipped */
+  gsk_gl_command_queue_bind_framebuffer (job->command_queue, job->framebuffer);
+  gsk_gl_command_queue_clear (job->command_queue, 0, &job->viewport);
+  gsk_gl_program_begin_draw (job->driver->blit,
+                             &job->viewport,
+                             &proj,
+                             gsk_gl_render_job_get_modelview_matrix (job),
+                             gsk_gl_render_job_get_clip (job),
+                             1.0);
+  gsk_gl_program_set_uniform_texture (job->driver->blit,
+                                      UNIFORM_SHARED_SOURCE,
+                                      GL_TEXTURE_2D,
+                                      GL_TEXTURE0,
+                                      texture_id);
+  gsk_gl_render_job_draw_rect (job, &job->viewport);
+  gsk_gl_program_end_draw (job->driver->blit);
+
+  gdk_gl_context_push_debug_group (context, "Executing command queue");
+  gsk_gl_command_queue_execute (job->command_queue);
+  gdk_gl_context_pop_debug_group (context);
+
+  gsk_next_driver_end_frame (job->driver);
+
+  gdk_gl_context_make_current (context);
+
+  glDeleteFramebuffers (1, &framebuffer_id);
+  glDeleteTextures (1, &texture_id);
 }
 
 void

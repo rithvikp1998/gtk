@@ -229,8 +229,7 @@ gsk_gl_renderer_render (GskRenderer          *renderer,
                                &viewport,
                                scale_factor,
                                render_region,
-                               0,
-                               FALSE);
+                               0);
   gsk_gl_render_job_render (job, root);
   gdk_draw_context_end_frame (GDK_DRAW_CONTEXT (context));
 
@@ -270,8 +269,8 @@ gsk_gl_renderer_render_texture (GskRenderer           *renderer,
 
   gsk_next_driver_autorelease_framebuffer (self->driver, fbo_id);
 
-  job = gsk_gl_render_job_new (self->driver, viewport, 1, NULL, fbo_id, TRUE);
-  gsk_gl_render_job_render (job, root);
+  job = gsk_gl_render_job_new (self->driver, viewport, 1, NULL, fbo_id);
+  gsk_gl_render_job_render_flipped (job, root);
   gsk_gl_render_job_free (job);
 
   return create_texture_from_texture (context, texture_id, width, height);
