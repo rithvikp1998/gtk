@@ -1328,7 +1328,49 @@ gsk_gl_render_job_visit_transform_node (GskGLRenderJob *job,
     case GSK_TRANSFORM_CATEGORY_3D:
     case GSK_TRANSFORM_CATEGORY_ANY:
     case GSK_TRANSFORM_CATEGORY_UNKNOWN:
-      g_warning ("TODO: complex transform\n");
+#if 0
+      {
+        TextureRegion region;
+        gboolean is_offscreen;
+
+        if (node_supports_transform (child))
+          {
+            ops_push_modelview (builder, node_transform);
+            gsk_gl_renderer_add_render_ops (self, child, builder);
+            ops_pop_modelview (builder);
+          }
+        else
+          {
+            int filter_flag = 0;
+
+            if (!result_is_axis_aligned (node_transform, &child->bounds))
+              filter_flag = LINEAR_FILTER;
+
+            if (add_offscreen_ops (self, builder,
+                                   &child->bounds,
+                                   child,
+                                   &region, &is_offscreen,
+                                   RESET_CLIP | filter_flag))
+              {
+                /* For non-trivial transforms, we draw everything on a texture and then
+                 * draw the texture transformed. */
+                /* TODO: We should compute a modelview containing only the "non-trivial"
+                 *       part (e.g. the rotation) and use that. We want to keep the scale
+                 *       for the texture.
+                 */
+                ops_push_modelview (builder, node_transform);
+                ops_set_texture (builder, region.texture_id);
+                ops_set_program (builder, &self->programs->blit_program);
+
+                load_vertex_data_with_region (ops_draw (builder, NULL),
+                                              &child->bounds, builder,
+                                              &region,
+                                              is_offscreen);
+                ops_pop_modelview (builder);
+              }
+          }
+      }
+#endif
 
     break;
 
@@ -1453,7 +1495,6 @@ static void
 gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
                                                     GskRenderNode  *node)
 {
-  g_warning ("TODO: blurred outset shadow");
 }
 
 static inline bool G_GNUC_PURE
