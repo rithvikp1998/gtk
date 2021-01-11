@@ -67,8 +67,8 @@ struct _GskNextDriver
 
   GskGLTexturePool texture_pool;
 
-  GskGLGlyphLibrary  *glyphs;
-  GskGLIconLibrary   *icons;
+  GskGLGlyphLibrary *glyphs;
+  GskGLIconLibrary *icons;
   GskGLShadowLibrary *shadows;
 
   GHashTable *textures;
