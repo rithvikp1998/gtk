@@ -506,8 +506,6 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
   GdkTexture *downloaded_texture = NULL;
   GdkTexture *source_texture;
   GskGLTexture *t;
-  float width;
-  float height;
 
   g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), 0);
   g_return_val_if_fail (GDK_IS_TEXTURE (texture), 0);
@@ -557,9 +555,6 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
 
       source_texture = texture;
     }
-
-  width = gdk_texture_get_width (texture);
-  height = gdk_texture_get_height (texture);
 
   t = g_slice_new0 (GskGLTexture);
   t->width = gdk_texture_get_width (texture);
