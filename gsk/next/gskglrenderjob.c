@@ -1048,14 +1048,14 @@ gsk_gl_render_job_visit_repeating_radial_gradient_node (GskGLRenderJob *job,
 }
 
 static void
-gsk_gl_render_job_visit_clipped_child (GskGLRenderJob       *job,
-                                       GskRenderNode        *child,
-                                       const GskRoundedRect *clip)
+gsk_gl_render_job_visit_clipped_child (GskGLRenderJob        *job,
+                                       GskRenderNode         *child,
+                                       const graphene_rect_t *clip)
 {
   graphene_rect_t transformed_clip;
   GskRoundedRect intersection;
 
-  gsk_gl_render_job_transform_bounds (job, &clip->bounds, &transformed_clip);
+  gsk_gl_render_job_transform_bounds (job, clip, &transformed_clip);
 
   if (gsk_gl_render_job_clip_is_rectilinear (job))
     {
@@ -1070,7 +1070,9 @@ gsk_gl_render_job_visit_clipped_child (GskGLRenderJob       *job,
       gsk_gl_render_job_visit_node (job, child);
       gsk_gl_render_job_pop_clip (job);
     }
-  else if (intersect_rounded_rectilinear (&transformed_clip, clip, &intersection))
+  else if (intersect_rounded_rectilinear (&transformed_clip,
+                                          gsk_gl_render_job_get_clip (job),
+                                          &intersection))
     {
       gsk_gl_render_job_push_clip (job, &intersection);
       gsk_gl_render_job_visit_node (job, child);
@@ -1078,39 +1080,34 @@ gsk_gl_render_job_visit_clipped_child (GskGLRenderJob       *job,
     }
   else
     {
-#if 0
       GskRoundedRect scaled_clip;
-      TextureRegion region;
-      gboolean is_offscreen;
+      GskGLRenderOffscreen offscreen = {0};
+
+      offscreen.bounds = &child->bounds;
+      offscreen.force_offscreen = TRUE;
 
       scaled_clip = GSK_ROUNDED_RECT_INIT (clip->origin.x * job->scale_x,
-                                           clip->origin.y * scale_y,
+                                           clip->origin.y * job->scale_y,
                                            clip->size.width * job->scale_x,
-                                           clip->size.height * scale_y);
+                                           clip->size.height * job->scale_y);
 
       gsk_gl_render_job_push_clip (job, &scaled_clip);
-      if (!add_offscreen_ops (self, builder, &child->bounds,
-                              child,
-                              &region, &is_offscreen,
-                              FORCE_OFFSCREEN))
-        g_assert_not_reached ();
+      gsk_gl_render_job_visit_node_with_offscreen (job, child, &offscreen);
       gsk_gl_render_job_pop_clip (job);
-
-      /* TODO: offscreen stuff will tweak these a bit */
 
       gsk_gl_program_begin_draw (job->driver->blit,
                                  &job->viewport,
                                  &job->projection,
                                  gsk_gl_render_job_get_modelview_matrix (job),
-                                 &clip->bounds,
+                                 gsk_gl_render_job_get_clip (job),
                                  job->alpha);
       gsk_gl_program_set_uniform_texture (job->driver->blit,
                                           UNIFORM_SHARED_SOURCE,
                                           GL_TEXTURE_2D,
                                           GL_TEXTURE0,
-                                          region.texture_id);
+                                          offscreen.texture_id);
+      gsk_gl_render_job_draw_offscreen_rect (job, &child->bounds);
       gsk_gl_program_end_draw (job->driver->blit);
-#endif
     }
 }
 
@@ -1120,9 +1117,8 @@ gsk_gl_render_job_visit_clip_node (GskGLRenderJob *job,
 {
   const graphene_rect_t *clip = gsk_clip_node_get_clip (node);
   GskRenderNode *child = gsk_clip_node_get_child (node);
-  GskRoundedRect rounded_clip = { .bounds = *clip };
 
-  gsk_gl_render_job_visit_clipped_child (job, child, &rounded_clip);
+  gsk_gl_render_job_visit_clipped_child (job, child, clip);
 }
 
 static void
@@ -1193,13 +1189,13 @@ gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
           gsk_gl_render_job_pop_clip (job);
         }
     }
-
-#if 0
   else
     {
+      GskGLRenderOffscreen offscreen = {0};
       GskRoundedRect scaled_clip;
-      gboolean is_offscreen;
-      TextureRegion region;
+
+      offscreen.bounds = &node->bounds;
+
       /* NOTE: We are *not* transforming the clip by the current modelview here.
        *       We instead draw the untransformed clip to a texture and then transform
        *       that texture.
@@ -1212,27 +1208,30 @@ gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
       scaled_clip.bounds.size.height = clip->bounds.size.height * scale_y;
 
       /* Increase corner radius size by scale factor */
-      for (i = 0; i < 4; i ++)
+      for (guint i = 0; i < 4; i ++)
         {
           scaled_clip.corner[i].width = clip->corner[i].width * scale_x;
           scaled_clip.corner[i].height = clip->corner[i].height * scale_y;
         }
 
-      ops_push_clip (builder, &scaled_clip);
-      if (!add_offscreen_ops (self, builder, &node->bounds,
-                              child,
-                              &region, &is_offscreen,
-                              0))
-        g_assert_not_reached ();
+      gsk_gl_render_job_push_clip (job, &scaled_clip);
+      gsk_gl_render_job_visit_node_with_offscreen (job, child, &offscreen);
+      gsk_gl_render_job_pop_clip (job);
 
-      ops_pop_clip (builder);
-
-      ops_set_program (builder, &job->programs->blit_program);
-      ops_set_texture (builder, region.texture_id);
-
-      load_offscreen_vertex_data (ops_draw (builder, NULL), node, builder);
+      gsk_gl_program_begin_draw (job->driver->blit,
+                                 &job->viewport,
+                                 &job->projection,
+                                 gsk_gl_render_job_get_modelview_matrix (job),
+                                 gsk_gl_render_job_get_clip (job),
+                                 job->alpha);
+      gsk_gl_program_set_uniform_texture (job->driver->blit,
+                                          UNIFORM_SHARED_SOURCE,
+                                          GL_TEXTURE_2D,
+                                          GL_TEXTURE0,
+                                          offscreen.texture_id);
+      gsk_gl_render_job_draw_offscreen_rect (job, &node->bounds);
+      gsk_gl_program_end_draw (job->driver->blit);
     }
-#endif
 }
 
 static inline void
@@ -1845,11 +1844,13 @@ gsk_gl_render_job_visit_repeat_node (GskGLRenderJob *job,
    * of the child texture... */
   if (graphene_rect_contains_rect (child_bounds, &node->bounds))
     {
+#if 0
       gsk_gl_render_job_visit_clipped_child (job,
                                              child,
                                              &(GskRoundedRect) {
                                                .bounds = *child_bounds,
                                              });
+#endif
       return;
     }
 
