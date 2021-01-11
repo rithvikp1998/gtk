@@ -23,15 +23,17 @@
 
 #include "gskgltypes.h"
 
-GskGLRenderJob *gsk_gl_render_job_new            (GskNextDriver         *driver,
-                                                  const graphene_rect_t *viewport,
-                                                  float                  scale_factor,
-                                                  const cairo_region_t  *region,
-                                                  guint                  framebuffer);
-void            gsk_gl_render_job_free           (GskGLRenderJob        *job);
-void            gsk_gl_render_job_render         (GskGLRenderJob        *job,
-                                                  GskRenderNode         *root);
-void            gsk_gl_render_job_render_flipped (GskGLRenderJob        *job,
-                                                  GskRenderNode         *root);
+GskGLRenderJob *gsk_gl_render_job_new                 (GskNextDriver         *driver,
+                                                       const graphene_rect_t *viewport,
+                                                       float                  scale_factor,
+                                                       const cairo_region_t  *region,
+                                                       guint                  framebuffer);
+void            gsk_gl_render_job_free                (GskGLRenderJob        *job);
+void            gsk_gl_render_job_render              (GskGLRenderJob        *job,
+                                                       GskRenderNode         *root);
+void            gsk_gl_render_job_render_flipped      (GskGLRenderJob        *job,
+                                                       GskRenderNode         *root);
+void            gsk_gl_render_job_set_debug_falllback (GskGLRenderJob        *job,
+                                                       gboolean               debug_fallback);
 
 #endif /* __GSK_GL_RENDER_JOB_H__ */

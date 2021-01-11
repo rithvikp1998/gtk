@@ -24,6 +24,7 @@
 #include "config.h"
 
 #include <gdk/gdkglcontextprivate.h>
+#include <gdk/gdktextureprivate.h>
 #include <gsk/gskrendernodeprivate.h>
 #include <math.h>
 #include <string.h>
@@ -79,6 +80,7 @@ struct _GskGLRenderJob
   float              offset_y;
   float              scale_x;
   float              scale_y;
+  guint              debug_fallback : 1;
 };
 
 typedef struct _GskGLRenderClip
@@ -654,16 +656,13 @@ gsk_gl_render_job_node_overlaps_clip (GskGLRenderJob *job,
 }
 
 static void
-gsk_gl_render_job_draw_rect (GskGLRenderJob        *job,
-                             const graphene_rect_t *rect)
+gsk_gl_render_job_draw_coords (GskGLRenderJob *job,
+                               float           min_x,
+                               float           min_y,
+                               float           max_x,
+                               float           max_y)
 {
-  GskGLDrawVertex *vertices;
-  const float min_x = job->offset_x + rect->origin.x;
-  const float min_y = job->offset_y + rect->origin.y;
-  const float max_x = min_x + rect->size.width;
-  const float max_y = min_y + rect->size.height;
-
-  vertices = gsk_gl_command_queue_add_vertices (job->command_queue, NULL);
+  GskGLDrawVertex *vertices = gsk_gl_command_queue_add_vertices (job->command_queue, NULL);
 
   vertices[0].position[0] = min_x;
   vertices[0].position[1] = min_y;
@@ -697,49 +696,30 @@ gsk_gl_render_job_draw_rect (GskGLRenderJob        *job,
 }
 
 static void
+gsk_gl_render_job_draw_rect (GskGLRenderJob        *job,
+                             const graphene_rect_t *rect)
+{
+  float min_x = job->offset_x + rect->origin.x;
+  float min_y = job->offset_y + rect->origin.y;
+  float max_x = min_x + rect->size.width;
+  float max_y = min_y + rect->size.height;
+
+  gsk_gl_render_job_draw_coords (job, min_x, min_y, max_x, max_y);
+}
+
+static void
 gsk_gl_render_job_draw (GskGLRenderJob *job,
                         float           x,
                         float           y,
                         float           width,
                         float           height)
 {
-  GskGLDrawVertex *vertices;
-  const float min_x = job->offset_x + x;
-  const float min_y = job->offset_y + y;
-  const float max_x = min_x + width;
-  const float max_y = min_y + height;
+  float min_x = job->offset_x + x;
+  float min_y = job->offset_y + y;
+  float max_x = min_x + width;
+  float max_y = min_y + height;
 
-  vertices = gsk_gl_command_queue_add_vertices (job->command_queue, NULL);
-
-  vertices[0].position[0] = min_x;
-  vertices[0].position[1] = min_y;
-  vertices[0].uv[0] = 0;
-  vertices[0].uv[1] = 0;
-
-  vertices[1].position[0] = min_x;
-  vertices[1].position[1] = max_y;
-  vertices[1].uv[0] = 0;
-  vertices[1].uv[1] = 1;
-
-  vertices[2].position[0] = max_x;
-  vertices[2].position[1] = min_y;
-  vertices[2].uv[0] = 1;
-  vertices[2].uv[1] = 0;
-
-  vertices[3].position[0] = max_x;
-  vertices[3].position[1] = max_y;
-  vertices[3].uv[0] = 1;
-  vertices[3].uv[1] = 1;
-
-  vertices[4].position[0] = min_x;
-  vertices[4].position[1] = max_y;
-  vertices[4].uv[0] = 0;
-  vertices[4].uv[1] = 1;
-
-  vertices[5].position[0] = max_x;
-  vertices[5].position[1] = min_y;
-  vertices[5].uv[0] = 1;
-  vertices[5].uv[1] = 0;
+  gsk_gl_render_job_draw_coords (job, min_x, min_y, max_x, max_y);
 }
 
 static void
@@ -789,9 +769,137 @@ gsk_gl_render_job_draw_from_offscreen (GskGLRenderJob        *job,
 }
 
 static void
+gsk_gl_render_job_draw_offscren_rect (GskGLRenderJob        *job,
+                                      const graphene_rect_t *bounds)
+{
+  float min_x = job->offset_x + bounds->origin.x;
+  float min_y = job->offset_y + bounds->origin.y;
+  float max_x = min_x + bounds->size.width;
+  float max_y = min_y + bounds->size.height;
+
+  gsk_gl_render_job_draw_coords (job, min_x, min_y, max_x, max_y);
+}
+
+static void
 gsk_gl_render_job_visit_as_fallback (GskGLRenderJob *job,
                                      GskRenderNode  *node)
 {
+  float scale_x = job->scale_x;
+  float scale_y = job->scale_y;
+  int surface_width = ceilf (node->bounds.size.width * scale_x);
+  int surface_height = ceilf (node->bounds.size.height * scale_y);
+  GdkTexture *texture;
+  cairo_surface_t *surface;
+  cairo_surface_t *rendered_surface;
+  cairo_t *cr;
+  graphene_rect_t area;
+  int cached_id;
+  int texture_id;
+  GskTextureKey key;
+
+  if (surface_width <= 0 || surface_height <= 0)
+    return;
+
+  key.pointer = node;
+  key.pointer_is_child = FALSE;
+  key.scale_x = scale_x;
+  key.scale_y = scale_y;
+  key.filter = GL_NEAREST;
+
+  cached_id = gsk_next_driver_lookup_texture (job->driver, &key);
+
+  if (cached_id != 0)
+    {
+      gsk_gl_program_begin_draw (job->driver->blit,
+                                 &job->viewport,
+                                 &job->projection,
+                                 gsk_gl_render_job_get_modelview_matrix (job),
+                                 gsk_gl_render_job_get_clip (job),
+                                 job->alpha);
+      gsk_gl_program_set_uniform_texture (job->driver->blit,
+                                          UNIFORM_SHARED_SOURCE,
+                                          GL_TEXTURE_2D, GL_TEXTURE0, cached_id);
+      gsk_gl_render_job_draw_offscren_rect (job, &node->bounds);
+      gsk_gl_program_end_draw (job->driver->blit);
+      return;
+    }
+
+  /* We first draw the recording surface on an image surface,
+   * just because the scaleY(-1) later otherwise screws up the
+   * rendering... */
+  {
+    rendered_surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
+                                                   surface_width,
+                                                   surface_height);
+
+    cairo_surface_set_device_scale (rendered_surface, scale_x, scale_y);
+    cr = cairo_create (rendered_surface);
+
+    cairo_save (cr);
+    cairo_translate (cr, - floorf (node->bounds.origin.x), - floorf (node->bounds.origin.y));
+    gsk_render_node_draw (node, cr);
+    cairo_restore (cr);
+    cairo_destroy (cr);
+  }
+
+  surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32,
+                                        surface_width,
+                                        surface_height);
+  cairo_surface_set_device_scale (surface, scale_x, scale_y);
+  cr = cairo_create (surface);
+
+  /* We draw upside down here, so it matches what GL does. */
+  cairo_save (cr);
+  cairo_scale (cr, 1, -1);
+  cairo_translate (cr, 0, - surface_height / scale_y);
+  cairo_set_source_surface (cr, rendered_surface, 0, 0);
+  cairo_rectangle (cr, 0, 0, surface_width / scale_x, surface_height / scale_y);
+  cairo_fill (cr);
+  cairo_restore (cr);
+
+#ifdef G_ENABLE_DEBUG
+  if (job->debug_fallback)
+    {
+      cairo_move_to (cr, 0, 0);
+      cairo_rectangle (cr, 0, 0, node->bounds.size.width, node->bounds.size.height);
+      if (gsk_render_node_get_node_type (node) == GSK_CAIRO_NODE)
+        cairo_set_source_rgba (cr, 0.3, 0, 1, 0.25);
+      else
+        cairo_set_source_rgba (cr, 1, 0, 0, 0.25);
+      cairo_fill_preserve (cr);
+      if (gsk_render_node_get_node_type (node) == GSK_CAIRO_NODE)
+        cairo_set_source_rgba (cr, 0.3, 0, 1, 1);
+      else
+        cairo_set_source_rgba (cr, 1, 0, 0, 1);
+      cairo_stroke (cr);
+    }
+#endif
+  cairo_destroy (cr);
+
+  /* Create texture to upload */
+  texture = gdk_texture_new_for_surface (surface);
+  texture_id = gsk_next_driver_load_texture (job->driver, texture, GL_NEAREST, GL_NEAREST, &area);
+
+  if (gdk_gl_context_has_debug (job->command_queue->context))
+    gdk_gl_context_label_object_printf (job->command_queue->context, GL_TEXTURE, texture_id,
+                                        "Fallback %s %d",
+                                        g_type_name_from_instance ((GTypeInstance *) node),
+                                        texture_id);
+
+  g_object_unref (texture);
+  cairo_surface_destroy (surface);
+  cairo_surface_destroy (rendered_surface);
+
+  gsk_next_driver_cache_texture (job->driver, &key, texture_id);
+
+  gsk_gl_program_begin_draw (job->driver->blit,
+                             &job->viewport,
+                             &job->projection,
+                             gsk_gl_render_job_get_modelview_matrix (job),
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
+  gsk_gl_render_job_draw_offscren_rect (job, &area);
+  gsk_gl_program_end_draw (job->driver->blit);
 }
 
 static void
@@ -1412,6 +1520,7 @@ static void
 gsk_gl_render_job_visit_blurred_inset_shadow_node (GskGLRenderJob *job,
                                                    GskRenderNode  *node)
 {
+  gsk_gl_render_job_visit_as_fallback (job, node);
 }
 
 static void
@@ -1497,6 +1606,7 @@ static void
 gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
                                                     GskRenderNode  *node)
 {
+  gsk_gl_render_job_visit_as_fallback (job, node);
 }
 
 static inline bool G_GNUC_PURE
@@ -1624,48 +1734,56 @@ gsk_gl_render_job_visit_text_node (GskGLRenderJob *job,
                                    const GdkRGBA  *color,
                                    gboolean        force_color)
 {
+  gsk_gl_render_job_visit_as_fallback (job, node);
 }
 
 static void
 gsk_gl_render_job_visit_shadow_node (GskGLRenderJob *job,
                                      GskRenderNode  *node)
 {
+  gsk_gl_render_job_visit_as_fallback (job, node);
 }
 
 static void
 gsk_gl_render_job_visit_blur_node (GskGLRenderJob *job,
                                    GskRenderNode  *node)
 {
+  gsk_gl_render_job_visit_as_fallback (job, node);
 }
 
 static void
 gsk_gl_render_job_visit_blend_node (GskGLRenderJob *job,
                                     GskRenderNode  *node)
 {
+  gsk_gl_render_job_visit_as_fallback (job, node);
 }
 
 static void
 gsk_gl_render_job_visit_cairo_node (GskGLRenderJob *job,
                                     GskRenderNode  *node)
 {
+  gsk_gl_render_job_visit_as_fallback (job, node);
 }
 
 static void
 gsk_gl_render_job_visit_color_matrix_node (GskGLRenderJob *job,
                                            GskRenderNode  *node)
 {
+  gsk_gl_render_job_visit_as_fallback (job, node);
 }
 
 static void
 gsk_gl_render_job_visit_gl_shader_node (GskGLRenderJob *job,
                                         GskRenderNode  *node)
 {
+  gsk_gl_render_job_visit_as_fallback (job, node);
 }
 
 static void
 gsk_gl_render_job_visit_texture_node (GskGLRenderJob *job,
                                       GskRenderNode  *node)
 {
+  gsk_gl_render_job_visit_as_fallback (job, node);
 }
 
 static void
@@ -2006,4 +2124,13 @@ gsk_gl_render_job_render (GskGLRenderJob *job,
   gdk_gl_context_pop_debug_group (context);
 
   gsk_next_driver_end_frame (job->driver);
+}
+
+void
+gsk_gl_render_job_set_debug_falllback (GskGLRenderJob *job,
+                                       gboolean        debug_fallback)
+{
+  g_return_if_fail (job != NULL);
+
+  job->debug_fallback = !!debug_fallback;
 }
