@@ -605,13 +605,13 @@ gsk_gl_uniform_state_set1fv (GskGLUniformState *state,
   g_assert (state != NULL);
   g_assert (program > 0);
 
-  if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_1F, count, location, &info)))
+  if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_1FV, count, location, &info)))
     {
       gboolean changed = memcmp (u, value, sizeof (Uniform1f) * count) != 0;
 
       if (changed)
         {
-          REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_1F, count);
+          REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_1FV, count);
           memcpy (u, value, sizeof (Uniform1f) * count);
           program_changed (state, info, program);
         }
@@ -631,13 +631,13 @@ gsk_gl_uniform_state_set2fv (GskGLUniformState *state,
   g_assert (state != NULL);
   g_assert (program > 0);
 
-  if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_2F, count, location, &info)))
+  if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_2FV, count, location, &info)))
     {
       gboolean changed = memcmp (u, value, sizeof (Uniform2f) * count) != 0;
 
       if (changed)
         {
-          REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_2F, count);
+          REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_2FV, count);
           memcpy (u, value, sizeof (Uniform2f) * count);
           program_changed (state, info, program);
         }
@@ -657,13 +657,13 @@ gsk_gl_uniform_state_set3fv (GskGLUniformState *state,
   g_assert (state != NULL);
   g_assert (program > 0);
 
-  if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_3F, count, location, &info)))
+  if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_3FV, count, location, &info)))
     {
       gboolean changed = memcmp (u, value, sizeof (Uniform3f) * count) != 0;
 
       if (changed)
         {
-          REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_3F, count);
+          REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_3FV, count);
           memcpy (u, value, sizeof (Uniform3f) * count);
           program_changed (state, info, program);
         }
@@ -683,13 +683,13 @@ gsk_gl_uniform_state_set4fv (GskGLUniformState *state,
   g_assert (state != NULL);
   g_assert (program > 0);
 
-  if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_4F, count, location, &info)))
+  if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_4FV, count, location, &info)))
     {
       gboolean changed = memcmp (u, value, sizeof (Uniform4f) * count) != 0;
 
       if (changed)
         {
-          REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_4F, count);
+          REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_4FV, count);
           memcpy (u, value, sizeof (Uniform4f) * count);
           program_changed (state, info, program);
         }
