@@ -1004,6 +1004,45 @@ static void
 gsk_gl_render_job_visit_radial_gradient_node (GskGLRenderJob *job,
                                               GskRenderNode  *node)
 {
+  int n_color_stops = gsk_radial_gradient_node_get_n_color_stops (node);
+  const GskColorStop *stops = gsk_radial_gradient_node_get_color_stops (node, NULL);
+  const graphene_point_t *center = gsk_radial_gradient_node_get_center (node);
+  float start = gsk_radial_gradient_node_get_start (node);
+  float end = gsk_radial_gradient_node_get_end (node);
+  float hradius = gsk_radial_gradient_node_get_hradius (node);
+  float vradius = gsk_radial_gradient_node_get_vradius (node);
+
+  g_assert (n_color_stops < MAX_GRADIENT_STOPS);
+
+  gsk_gl_program_begin_draw (job->driver->radial_gradient,
+                             &job->viewport,
+                             &job->projection,
+                             gsk_gl_render_job_get_modelview_matrix (job),
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
+  gsk_gl_program_set_uniform1i (job->driver->radial_gradient,
+                                UNIFORM_RADIAL_GRADIENT_NUM_COLOR_STOPS,
+                                n_color_stops);
+  gsk_gl_program_set_uniform1fv (job->driver->radial_gradient,
+                                 UNIFORM_RADIAL_GRADIENT_COLOR_STOPS,
+                                 n_color_stops * 5,
+                                 (const float *)stops);
+  gsk_gl_program_set_uniform1f (job->driver->radial_gradient,
+                                UNIFORM_RADIAL_GRADIENT_START,
+                                start);
+  gsk_gl_program_set_uniform1f (job->driver->radial_gradient,
+                                UNIFORM_RADIAL_GRADIENT_END,
+                                end);
+  gsk_gl_program_set_uniform2f (job->driver->radial_gradient,
+                                UNIFORM_RADIAL_GRADIENT_RADIUS,
+                                job->scale_x * hradius,
+                                job->scale_y * vradius);
+  gsk_gl_program_set_uniform2f (job->driver->radial_gradient,
+                                UNIFORM_RADIAL_GRADIENT_CENTER,
+                                job->offset_x + center->x,
+                                job->offset_y + center->y);
+  gsk_gl_render_job_draw_rect (job, &node->bounds);
+  gsk_gl_program_end_draw (job->driver->radial_gradient);
 }
 
 static void
