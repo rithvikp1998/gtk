@@ -1811,6 +1811,7 @@ gsk_gl_render_job_visit_repeat_node (GskGLRenderJob *job,
 {
   GskRenderNode *child = gsk_repeat_node_get_child (node);
   const graphene_rect_t *child_bounds = gsk_repeat_node_get_child_bounds (node);
+  GskGLRenderOffscreen offscreen = {0};
 
   if (node_is_invisible (child))
     return;
@@ -1827,17 +1828,47 @@ gsk_gl_render_job_visit_repeat_node (GskGLRenderJob *job,
    * of the child texture... */
   if (graphene_rect_contains_rect (child_bounds, &node->bounds))
     {
-#if 0
-      gsk_gl_render_job_visit_clipped_child (job,
-                                             child,
-                                             &(GskRoundedRect) {
-                                               .bounds = *child_bounds,
-                                             });
-#endif
+      gsk_gl_render_job_visit_clipped_child (job, child, child_bounds);
       return;
     }
 
-  /* TODO: */
+  offscreen.bounds = &child->bounds;
+  offscreen.reset_clip = TRUE;
+
+  if (!gsk_gl_render_job_visit_node_with_offscreen (job, child, &offscreen))
+    g_assert_not_reached ();
+
+  gsk_gl_program_begin_draw (job->driver->repeat,
+                             &job->viewport,
+                             &job->projection,
+                             gsk_gl_render_job_get_modelview_matrix (job),
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
+  gsk_gl_program_set_uniform_texture (job->driver->repeat,
+                                      UNIFORM_SHARED_SOURCE,
+                                      GL_TEXTURE_2D,
+                                      GL_TEXTURE0,
+                                      offscreen.texture_id);
+  gsk_gl_program_set_uniform4fv (job->driver->repeat,
+                                 UNIFORM_REPEAT_CHILD_BOUNDS,
+                                 1,
+                                 (const float []) {
+                                   node->bounds.origin.x - child_bounds->origin.x,
+                                   node->bounds.origin.y - child_bounds->origin.y,
+                                   node->bounds.size.width / child_bounds->size.width,
+                                   node->bounds.size.height / child_bounds->size.height,
+                                 });
+  gsk_gl_program_set_uniform4fv (job->driver->repeat,
+                                 UNIFORM_REPEAT_TEXTURE_RECT,
+                                 1,
+                                 (const float []) {
+                                   X1 (&offscreen.area),
+                                   offscreen.was_offscreen ? Y2 (&offscreen.area) : Y1 (&offscreen.area),
+                                   X2 (&offscreen.area),
+                                   offscreen.was_offscreen ? Y1 (&offscreen.area) : Y2 (&offscreen.area),
+                                 });
+  gsk_gl_render_job_load_vertices_from_offscreen (job, &node->bounds, &offscreen);
+  gsk_gl_program_end_draw (job->driver->repeat);
 }
 
 static void
@@ -2346,4 +2377,3 @@ gsk_gl_render_job_free (GskGLRenderJob *job)
   g_clear_pointer (&job->clip, g_array_unref);
   g_slice_free (GskGLRenderJob, job);
 }
-
