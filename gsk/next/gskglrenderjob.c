@@ -1046,18 +1046,6 @@ gsk_gl_render_job_visit_radial_gradient_node (GskGLRenderJob *job,
 }
 
 static void
-gsk_gl_render_job_visit_repeating_linear_gradient_node (GskGLRenderJob *job,
-                                                        GskRenderNode  *node)
-{
-}
-
-static void
-gsk_gl_render_job_visit_repeating_radial_gradient_node (GskGLRenderJob *job,
-                                                        GskRenderNode  *node)
-{
-}
-
-static void
 gsk_gl_render_job_visit_clipped_child (GskGLRenderJob        *job,
                                        GskRenderNode         *child,
                                        const graphene_rect_t *clip)
@@ -1817,13 +1805,6 @@ gsk_gl_render_job_visit_blend_node (GskGLRenderJob *job,
 }
 
 static void
-gsk_gl_render_job_visit_cairo_node (GskGLRenderJob *job,
-                                    GskRenderNode  *node)
-{
-  gsk_gl_render_job_visit_as_fallback (job, node);
-}
-
-static void
 gsk_gl_render_job_visit_color_matrix_node (GskGLRenderJob *job,
                                            GskRenderNode  *node)
 {
@@ -1968,10 +1949,6 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
         gsk_gl_render_job_visit_border_node (job, node);
     break;
 
-    case GSK_CAIRO_NODE:
-      gsk_gl_render_job_visit_cairo_node (job, node);
-    break;
-
     case GSK_CLIP_NODE:
       gsk_gl_render_job_visit_clip_node (job, node);
     break;
@@ -2067,14 +2044,6 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
       gsk_gl_render_job_visit_repeat_node (job, node);
     break;
 
-    case GSK_REPEATING_LINEAR_GRADIENT_NODE:
-      gsk_gl_render_job_visit_repeating_linear_gradient_node (job, node);
-    break;
-
-    case GSK_REPEATING_RADIAL_GRADIENT_NODE:
-      gsk_gl_render_job_visit_repeating_radial_gradient_node (job, node);
-    break;
-
     case GSK_ROUNDED_CLIP_NODE:
       gsk_gl_render_job_visit_rounded_clip_node (job, node);
     break;
@@ -2096,6 +2065,12 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
 
     case GSK_TRANSFORM_NODE:
       gsk_gl_render_job_visit_transform_node (job, node);
+    break;
+
+    case GSK_REPEATING_LINEAR_GRADIENT_NODE:
+    case GSK_REPEATING_RADIAL_GRADIENT_NODE:
+    case GSK_CAIRO_NODE:
+      gsk_gl_render_job_visit_as_fallback (job, node);
     break;
 
     case GSK_NOT_A_RENDER_NODE:
