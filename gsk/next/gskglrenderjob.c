@@ -1801,7 +1801,54 @@ static void
 gsk_gl_render_job_visit_blend_node (GskGLRenderJob *job,
                                     GskRenderNode  *node)
 {
-  gsk_gl_render_job_visit_as_fallback (job, node);
+  GskRenderNode *top_child = gsk_blend_node_get_top_child (node);
+  GskRenderNode *bottom_child = gsk_blend_node_get_bottom_child (node);
+  GskGLRenderOffscreen top_offscreen = {0};
+  GskGLRenderOffscreen bottom_offscreen = {0};
+
+  top_offscreen.bounds = &node->bounds;
+  top_offscreen.force_offscreen = TRUE;
+  top_offscreen.reset_clip = TRUE;
+
+  bottom_offscreen.bounds = &node->bounds;
+  bottom_offscreen.force_offscreen = TRUE;
+  bottom_offscreen.reset_clip = TRUE;
+
+  /* TODO: We create 2 textures here as big as the blend node, but both the
+   * start and the end node might be a lot smaller than that. */
+  if (!gsk_gl_render_job_visit_node_with_offscreen (job, bottom_child, &bottom_offscreen))
+    {
+      gsk_gl_render_job_visit_node (job, top_child);
+      return;
+    }
+
+  if (!gsk_gl_render_job_visit_node_with_offscreen (job, top_child, &top_offscreen))
+    {
+      gsk_gl_render_job_load_vertices_from_offscreen (job, &node->bounds, &bottom_offscreen);
+      return;
+    }
+
+  gsk_gl_program_begin_draw (job->driver->blend,
+                             &job->viewport,
+                             &job->projection,
+                             gsk_gl_render_job_get_modelview_matrix (job),
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
+  gsk_gl_program_set_uniform_texture (job->driver->blend,
+                                      UNIFORM_SHARED_SOURCE,
+                                      GL_TEXTURE_2D,
+                                      GL_TEXTURE0,
+                                      bottom_offscreen.texture_id);
+  gsk_gl_program_set_uniform_texture (job->driver->blend,
+                                      UNIFORM_BLEND_SOURCE2,
+                                      GL_TEXTURE_2D,
+                                      GL_TEXTURE0,
+                                      top_offscreen.texture_id);
+  gsk_gl_program_set_uniform1i (job->driver->blend,
+                                UNIFORM_BLEND_MODE,
+                                gsk_blend_node_get_blend_mode (node));
+  gsk_gl_render_job_draw_offscreen_rect (job, &node->bounds);
+  gsk_gl_program_end_draw (job->driver->blend);
 }
 
 static void
