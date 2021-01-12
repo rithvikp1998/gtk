@@ -2271,12 +2271,17 @@ calculate_popup_rect (GdkSurface     *surface,
   int width, height;
   GdkRectangle anchor_rect;
   int dx, dy;
+  int shadow_left, shadow_right, shadow_top, shadow_bottom;
   int x = 0, y = 0;
 
-  width = (impl->popup.unconstrained_width -
-           (impl->shadow_left + impl->shadow_right));
-  height = (impl->popup.unconstrained_height -
-            (impl->shadow_top + impl->shadow_bottom));
+  gdk_popup_layout_get_shadow_width (layout,
+                                     shadow_left,
+                                     shadow_right,
+                                     shadow_top,
+                                     shadow_bottom);
+
+  width = (impl->popup.unconstrained_width - (shadow_left + shadow_right));
+  height = (impl->popup.unconstrained_height - (shadow_top + shadow_bottom));
 
   anchor_rect = *gdk_popup_layout_get_anchor_rect (layout);
   gdk_popup_layout_get_offset (layout, &dx, &dy);
@@ -2475,12 +2480,21 @@ create_dynamic_positioner (GdkSurface     *surface,
   GdkGravity rect_anchor;
   GdkGravity surface_anchor;
   GdkAnchorHints anchor_hints;
+  int shadow_left;
+  int shadow_right;
+  int shadow_top;
+  int shadow_bottom;
 
+  gdk_popup_layout_get_shadow_width (layout,
+                                     shadow_left,
+                                     shadow_right,
+                                     shadow_top,
+                                     shadow_bottom);
   geometry = (GdkRectangle) {
-    .x = impl->shadow_left,
-    .y = impl->shadow_top,
-    .width = width - (impl->shadow_left + impl->shadow_right),
-    .height = height - (impl->shadow_top + impl->shadow_bottom),
+    .x = shadow_left,
+    .y = shadow_top,
+    .width = width - (shadow_left + shadow_right),
+    .height = height - (shadow_top + shadow_bottom),
   };
 
   anchor_rect = gdk_popup_layout_get_anchor_rect (layout);
