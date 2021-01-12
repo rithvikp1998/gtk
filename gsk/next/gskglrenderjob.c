@@ -1788,7 +1788,35 @@ static void
 gsk_gl_render_job_visit_color_matrix_node (GskGLRenderJob *job,
                                            GskRenderNode  *node)
 {
-  gsk_gl_render_job_visit_as_fallback (job, node);
+  GskRenderNode *child = gsk_color_matrix_node_get_child (node);
+  GskGLRenderOffscreen offscreen = {0};
+  float offset[4];
+
+  if (node_is_invisible (child))
+    return;
+
+  offscreen.bounds = &node->bounds;
+  offscreen.reset_clip = TRUE;
+
+  if (!gsk_gl_render_job_visit_node_with_offscreen (job, child, &offscreen))
+    g_assert_not_reached ();
+
+  graphene_vec4_to_float (gsk_color_matrix_node_get_color_offset (node), offset);
+
+  gsk_gl_program_begin_draw (job->driver->color_matrix,
+                             &job->viewport,
+                             &job->projection,
+                             gsk_gl_render_job_get_modelview_matrix (job),
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
+  gsk_gl_program_set_uniform_matrix (job->driver->color_matrix,
+                                     UNIFORM_COLOR_MATRIX_COLOR_MATRIX,
+                                     gsk_color_matrix_node_get_color_matrix (node));
+  gsk_gl_program_set_uniform4fv (job->driver->color_matrix,
+                                 UNIFORM_COLOR_MATRIX_COLOR_OFFSET,
+                                 1,
+                                 offset);
+  gsk_gl_program_end_draw (job->driver->color_matrix);
 }
 
 static void
