@@ -120,7 +120,6 @@ typedef struct _GskGLRenderOffscreen
   guint reset_clip : 1;
   guint do_not_cache : 1;
   guint linear_filter : 1;
-  guint flip_y : 1;
   guint was_offscreen : 1;
 } GskGLRenderOffscreen;
 
@@ -647,8 +646,8 @@ gsk_gl_render_job_load_vertices_from_offscreen (GskGLRenderJob             *job,
   float min_y = job->offset_y + bounds->origin.y;
   float max_x = min_x + bounds->size.width;
   float max_y = min_y + bounds->size.height;
-  float y1 = offscreen->flip_y ? Y2 (&offscreen->area) : Y1 (&offscreen->area);
-  float y2 = offscreen->flip_y ? Y1 (&offscreen->area) : Y2 (&offscreen->area);
+  float y1 = offscreen->was_offscreen ? Y2 (&offscreen->area) : Y1 (&offscreen->area);
+  float y2 = offscreen->was_offscreen ? Y1 (&offscreen->area) : Y2 (&offscreen->area);
 
   vertices[0].position[0] = min_x;
   vertices[0].position[1] = min_y;
