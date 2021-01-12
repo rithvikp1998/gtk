@@ -75,7 +75,7 @@ GSK_GL_DEFINE_PROGRAM (radial_gradient,
 GSK_GL_DEFINE_PROGRAM (repeat,
                        "/org/gtk/libgsk/glsl/repeat.glsl",
                        GSK_GL_ADD_UNIFORM (1, REPEAT_CHILD_BOUNDS, u_child_bounds)
-                       GSK_GL_ADD_UNIFORM (2, REPEAT_EXTURE_RECT, u_texture_rect))
+                       GSK_GL_ADD_UNIFORM (2, REPEAT_TEXTURE_RECT, u_texture_rect))
 
 GSK_GL_DEFINE_PROGRAM (unblurred_outset_shadow,
                        "/org/gtk/libgsk/glsl/unblurred_outset_shadow.glsl",
