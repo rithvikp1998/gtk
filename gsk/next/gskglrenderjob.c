@@ -83,6 +83,18 @@ struct _GskGLRenderJob
   guint              debug_fallback : 1;
 };
 
+typedef struct GskGLRenderState
+{
+  graphene_rect_t   viewport;
+  graphene_matrix_t projection;
+  guint             framebuffer;
+  float             alpha;
+  float             offset_x;
+  float             offset_y;
+  float             scale_x;
+  float             scale_y;
+} GskGLRenderState;
+
 typedef struct _GskGLRenderClip
 {
   GskRoundedRect rect;
@@ -537,6 +549,43 @@ gsk_gl_render_job_offset (GskGLRenderJob *job,
 {
   job->offset_x += offset_x;
   job->offset_y += offset_y;
+}
+
+static void
+gsk_gl_render_state_save (GskGLRenderState *state,
+                          GskGLRenderJob   *job)
+{
+  g_assert (state != NULL);
+  g_assert (job != NULL);
+
+  memcpy (&state->viewport, &job->viewport, sizeof state->viewport);
+  memcpy (&state->projection, &job->projection, sizeof state->projection);
+
+  state->framebuffer = job->command_queue->attachments->fbo.id;
+  state->alpha = job->alpha;
+  state->offset_x = job->offset_x;
+  state->offset_y = job->offset_y;
+  state->scale_x = job->scale_x;
+  state->scale_y = job->scale_y;
+}
+
+static void
+gsk_gl_render_state_restore (GskGLRenderState *state,
+                             GskGLRenderJob   *job)
+{
+  g_assert (state != NULL);
+  g_assert (job != NULL);
+
+  memcpy (&job->viewport, &state->viewport, sizeof state->viewport);
+  memcpy (&job->projection, &state->projection, sizeof state->projection);
+
+  gsk_gl_command_queue_bind_framebuffer (job->command_queue, state->framebuffer);
+
+  job->alpha = state->alpha;
+  job->offset_x = state->offset_x;
+  job->offset_y = state->offset_y;
+  job->scale_x = state->scale_x;
+  job->scale_y = state->scale_y;
 }
 
 static void
@@ -1018,6 +1067,8 @@ gsk_gl_render_job_visit_clipped_child (GskGLRenderJob        *job,
       gsk_gl_render_job_visit_node_with_offscreen (job, child, &offscreen);
       gsk_gl_render_job_pop_clip (job);
 
+      g_assert (offscreen.texture_id);
+
       gsk_gl_program_begin_draw (job->driver->blit,
                                  &job->viewport,
                                  &job->projection,
@@ -1138,8 +1189,11 @@ gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
         }
 
       gsk_gl_render_job_push_clip (job, &scaled_clip);
-      gsk_gl_render_job_visit_node_with_offscreen (job, child, &offscreen);
+      if (!gsk_gl_render_job_visit_node_with_offscreen (job, child, &offscreen))
+        g_assert_not_reached ();
       gsk_gl_render_job_pop_clip (job);
+
+      g_assert (offscreen.texture_id);
 
       gsk_gl_program_begin_draw (job->driver->blit,
                                  &job->viewport,
@@ -1613,6 +1667,8 @@ gsk_gl_render_job_visit_cross_fade_node (GskGLRenderJob *job,
       return;
     }
 
+  g_assert (offscreen_start.texture_id);
+
   if (!gsk_gl_render_job_visit_node_with_offscreen (job, end_node, &offscreen_end))
     {
       float prev_alpha = job->alpha;
@@ -1620,6 +1676,8 @@ gsk_gl_render_job_visit_cross_fade_node (GskGLRenderJob *job,
       job->alpha = prev_alpha;
       return;
     }
+
+  g_assert (offscreen_end.texture_id);
 
   gsk_gl_program_begin_draw (job->driver->cross_fade,
                              &job->viewport,
@@ -1663,6 +1721,8 @@ gsk_gl_render_job_visit_opacity_node (GskGLRenderJob *job,
       offscreen.reset_clip = TRUE;
 
       gsk_gl_render_job_visit_node_with_offscreen (job, child, &offscreen);
+
+      g_assert (offscreen.texture_id);
 
       gsk_gl_program_begin_draw (job->driver->blit,
                                  &job->viewport,
@@ -2008,7 +2068,95 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
       return TRUE;
     }
 
-  return FALSE;
+  float width = offscreen->bounds->size.width;
+  float height = offscreen->bounds->size.height;
+  float scale_x = job->scale_x;
+  float scale_y = job->scale_y;
+
+  g_assert (job->command_queue->max_texture_size > 0);
+
+  /* Tweak the scale factor so that the required texture doesn't
+   * exceed the max texture limit. This will render with a lower
+   * resolution, but this is better than clipping.
+   */
+  {
+    int max_texture_size = job->command_queue->max_texture_size;
+
+    width = ceilf (width * scale_x);
+    if (width > max_texture_size)
+      {
+        scale_x *= (float)max_texture_size / width;
+        width = max_texture_size;
+      }
+
+    height = ceilf (height * scale_y);
+    if (height > max_texture_size)
+      {
+        scale_y *= (float)max_texture_size / height;
+        height = max_texture_size;
+      }
+  }
+
+  guint framebuffer_id;
+  guint texture_id;
+  GskGLRenderState state;
+
+  gsk_gl_render_state_save (&state, job);
+
+  gsk_next_driver_create_render_target (job->driver,
+                                        width, height,
+                                        &texture_id, &framebuffer_id);
+
+  if (gdk_gl_context_has_debug (job->command_queue->context))
+    {
+      gdk_gl_context_label_object_printf (job->command_queue->context,
+                                          GL_TEXTURE, texture_id,
+                                          "Offscreen<%s> %d",
+                                          g_type_name_from_instance ((GTypeInstance *) node),
+                                          texture_id);
+      gdk_gl_context_label_object_printf (job->command_queue->context,
+                                          GL_FRAMEBUFFER, framebuffer_id,
+                                          "Offscreen<%s> FB %d",
+                                          g_type_name_from_instance ((GTypeInstance *) node),
+                                          framebuffer_id);
+    }
+
+  job->viewport.origin.x = offscreen->bounds->origin.x * scale_x;
+  job->viewport.origin.y = offscreen->bounds->origin.y * scale_y;
+  job->viewport.size.width = width;
+  job->viewport.size.height = height;
+
+  gsk_gl_command_queue_bind_framebuffer (job->command_queue, framebuffer_id);
+  gsk_gl_command_queue_clear (job->command_queue, 0, &job->viewport);
+
+  init_projection_matrix (&job->projection, &job->viewport);
+  gsk_gl_render_job_set_modelview (job, gsk_transform_scale (NULL, scale_x, scale_y));
+
+  if (offscreen->reset_clip)
+    gsk_gl_render_job_push_clip (job, &(GskRoundedRect) { .bounds = job->viewport });
+
+  job->offset_x = 0;
+  job->offset_y = 0;
+
+  gsk_gl_render_job_visit_node (job, node);
+
+  if (offscreen->reset_clip)
+    gsk_gl_render_job_pop_clip (job);
+
+  gsk_gl_render_job_pop_modelview (job);
+
+  gsk_gl_render_state_restore (&state, job);
+
+  offscreen->was_offscreen = TRUE;
+  offscreen->texture_id = texture_id;
+  init_full_texture_region (&offscreen->area);
+
+  gsk_next_driver_autorelease_framebuffer (job->driver, framebuffer_id);
+
+  if (!offscreen->do_not_cache)
+    gsk_next_driver_cache_texture (job->driver, &key, texture_id);
+
+  return TRUE;
 }
 
 void
