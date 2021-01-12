@@ -571,83 +571,6 @@ gsk_gl_render_job_transform_rounded_rect (GskGLRenderJob       *job,
   memcpy (out_rect->corner, rect->corner, sizeof out_rect->corner);
 }
 
-GskGLRenderJob *
-gsk_gl_render_job_new (GskNextDriver         *driver,
-                       const graphene_rect_t *viewport,
-                       float                  scale_factor,
-                       const cairo_region_t  *region,
-                       guint                  framebuffer)
-{
-  const graphene_rect_t *clip_rect = viewport;
-  graphene_rect_t transformed_extents;
-  GskGLRenderJob *job;
-
-  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (driver), NULL);
-  g_return_val_if_fail (viewport != NULL, NULL);
-  g_return_val_if_fail (scale_factor > 0, NULL);
-
-  job = g_slice_new0 (GskGLRenderJob);
-  job->driver = g_object_ref (driver);
-  job->command_queue = driver->command_queue;
-  job->clip = g_array_new (FALSE, FALSE, sizeof (GskGLRenderClip));
-  job->modelview = g_array_new (FALSE, FALSE, sizeof (GskGLRenderModelview));
-  job->framebuffer = framebuffer;
-  job->offset_x = 0;
-  job->offset_y = 0;
-  job->scale_x = scale_factor;
-  job->scale_y = scale_factor;
-  job->viewport = *viewport;
-  job->region = region ? cairo_region_copy (region) : NULL;
-  job->alpha = 1.0;
-
-  init_projection_matrix (&job->projection, viewport);
-  gsk_gl_render_job_set_modelview (job, gsk_transform_scale (NULL, scale_factor, scale_factor));
-
-  /* Setup our initial clip. If region is NULL then we are drawing the
-   * whole viewport. Otherwise, we need to convert the region to a
-   * bounding box and clip based on that.
-   */
-
-  if (region != NULL)
-    {
-      cairo_rectangle_int_t extents;
-
-      cairo_region_get_extents (region, &extents);
-      gsk_gl_render_job_transform_bounds (job,
-                                          &GRAPHENE_RECT_INIT (extents.x,
-                                                               extents.y,
-                                                               extents.width,
-                                                               extents.height),
-                                          &transformed_extents);
-      clip_rect = &transformed_extents;
-    }
-
-  gsk_gl_render_job_push_clip (job,
-                               &GSK_ROUNDED_RECT_INIT (clip_rect->origin.x,
-                                                       clip_rect->origin.y,
-                                                       clip_rect->size.width,
-                                                       clip_rect->size.height));
-
-  return job;
-}
-
-void
-gsk_gl_render_job_free (GskGLRenderJob *job)
-{
-  while (job->modelview->len > 0)
-    {
-      GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
-      g_clear_pointer (&modelview->transform, gsk_transform_unref);
-      job->modelview->len--;
-    }
-
-  g_clear_object (&job->driver);
-  g_clear_pointer (&job->region, cairo_region_destroy);
-  g_clear_pointer (&job->modelview, g_array_unref);
-  g_clear_pointer (&job->clip, g_array_unref);
-  g_slice_free (GskGLRenderJob, job);
-}
-
 static inline gboolean
 gsk_gl_render_job_node_overlaps_clip (GskGLRenderJob *job,
                                       GskRenderNode  *node)
@@ -2199,3 +2122,81 @@ gsk_gl_render_job_set_debug_falllback (GskGLRenderJob *job,
 
   job->debug_fallback = !!debug_fallback;
 }
+
+GskGLRenderJob *
+gsk_gl_render_job_new (GskNextDriver         *driver,
+                       const graphene_rect_t *viewport,
+                       float                  scale_factor,
+                       const cairo_region_t  *region,
+                       guint                  framebuffer)
+{
+  const graphene_rect_t *clip_rect = viewport;
+  graphene_rect_t transformed_extents;
+  GskGLRenderJob *job;
+
+  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (driver), NULL);
+  g_return_val_if_fail (viewport != NULL, NULL);
+  g_return_val_if_fail (scale_factor > 0, NULL);
+
+  job = g_slice_new0 (GskGLRenderJob);
+  job->driver = g_object_ref (driver);
+  job->command_queue = driver->command_queue;
+  job->clip = g_array_new (FALSE, FALSE, sizeof (GskGLRenderClip));
+  job->modelview = g_array_new (FALSE, FALSE, sizeof (GskGLRenderModelview));
+  job->framebuffer = framebuffer;
+  job->offset_x = 0;
+  job->offset_y = 0;
+  job->scale_x = scale_factor;
+  job->scale_y = scale_factor;
+  job->viewport = *viewport;
+  job->region = region ? cairo_region_copy (region) : NULL;
+  job->alpha = 1.0;
+
+  init_projection_matrix (&job->projection, viewport);
+  gsk_gl_render_job_set_modelview (job, gsk_transform_scale (NULL, scale_factor, scale_factor));
+
+  /* Setup our initial clip. If region is NULL then we are drawing the
+   * whole viewport. Otherwise, we need to convert the region to a
+   * bounding box and clip based on that.
+   */
+
+  if (region != NULL)
+    {
+      cairo_rectangle_int_t extents;
+
+      cairo_region_get_extents (region, &extents);
+      gsk_gl_render_job_transform_bounds (job,
+                                          &GRAPHENE_RECT_INIT (extents.x,
+                                                               extents.y,
+                                                               extents.width,
+                                                               extents.height),
+                                          &transformed_extents);
+      clip_rect = &transformed_extents;
+    }
+
+  gsk_gl_render_job_push_clip (job,
+                               &GSK_ROUNDED_RECT_INIT (clip_rect->origin.x,
+                                                       clip_rect->origin.y,
+                                                       clip_rect->size.width,
+                                                       clip_rect->size.height));
+
+  return job;
+}
+
+void
+gsk_gl_render_job_free (GskGLRenderJob *job)
+{
+  while (job->modelview->len > 0)
+    {
+      GskGLRenderModelview *modelview = gsk_gl_render_job_get_modelview (job);
+      g_clear_pointer (&modelview->transform, gsk_transform_unref);
+      job->modelview->len--;
+    }
+
+  g_clear_object (&job->driver);
+  g_clear_pointer (&job->region, cairo_region_destroy);
+  g_clear_pointer (&job->modelview, g_array_unref);
+  g_clear_pointer (&job->clip, g_array_unref);
+  g_slice_free (GskGLRenderJob, job);
+}
+
