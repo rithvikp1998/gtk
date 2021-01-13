@@ -1865,7 +1865,7 @@ blur_offscreen (GskGLRenderJob       *job,
   gsk_gl_program_set_uniform2f (job->driver->blur,
                                 UNIFORM_BLUR_DIR,
                                 1, 0);
-  gsk_gl_render_job_load_vertices_from_offscreen (job, &new_clip.bounds, offscreen);
+  gsk_gl_render_job_draw_coords (job, 0, 0, texture_to_blur_width, texture_to_blur_height);
   gsk_gl_program_end_draw (job->driver->blur);
 
   /* Bind second pass framebuffer and clear it */
@@ -1894,7 +1894,7 @@ blur_offscreen (GskGLRenderJob       *job,
   gsk_gl_program_set_uniform2f (job->driver->blur,
                                 UNIFORM_BLUR_DIR,
                                 0, 1);
-  gsk_gl_render_job_load_vertices_from_offscreen (job, &new_clip.bounds, offscreen);
+  gsk_gl_render_job_draw_coords (job, 0, 0, texture_to_blur_width, texture_to_blur_height);
   gsk_gl_program_end_draw (job->driver->blur);
 
   gsk_gl_render_job_pop_modelview (job);
@@ -1902,7 +1902,7 @@ blur_offscreen (GskGLRenderJob       *job,
 
   gsk_gl_render_state_restore (&state, job);
 
-  glDeleteTextures (1, &pass1_texture_id);
+  /* TODO: Release bound fbo/texture pair */
 
   return pass2_texture_id;
 }
@@ -1918,7 +1918,7 @@ blur_node (GskGLRenderJob       *job,
            float                *max_y)
 {
   const float blur_extra = blur_radius * 2.0; /* 2.0 = shader radius_multiplier */
-  const float half_blur_extra = blur_radius;
+  const float half_blur_extra = (blur_extra / 2.0);
   float scale_x = job->scale_x;
   float scale_y = job->scale_y;
   float texture_width;
@@ -1944,7 +1944,10 @@ blur_node (GskGLRenderJob       *job,
       if (!gsk_gl_render_job_visit_node_with_offscreen (job, node, offscreen))
         g_assert_not_reached ();
 
+      /* Ensure that we actually got a real texture_id */
       g_assert (offscreen->texture_id != 0);
+
+      /* If this wasn't FALSE, we'd have to release the texture */
       g_assert (offscreen->do_not_cache == FALSE);
 
       offscreen->texture_id = blur_offscreen (job,
