@@ -225,11 +225,7 @@ gsk_gl_renderer_render (GskRenderer          *renderer,
   viewport.size.height = gdk_surface_get_height (surface) * scale_factor;
 
   gdk_draw_context_begin_frame (GDK_DRAW_CONTEXT (context), update_area);
-  job = gsk_gl_render_job_new (self->driver,
-                               &viewport,
-                               scale_factor,
-                               render_region,
-                               0);
+  job = gsk_gl_render_job_new (self->driver, &viewport, scale_factor, render_region, 0);
   gsk_gl_render_job_render (job, root);
   gdk_draw_context_end_frame (GDK_DRAW_CONTEXT (context));
 
