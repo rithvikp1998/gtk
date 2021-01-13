@@ -913,6 +913,177 @@ gsk_gl_render_job_visit_as_fallback (GskGLRenderJob *job,
   gsk_gl_program_end_draw (job->driver->blit);
 }
 
+static guint
+blur_offscreen (GskGLRenderJob       *job,
+                GskGLRenderOffscreen *offscreen,
+                int                   texture_to_blur_width,
+                int                   texture_to_blur_height,
+                float                 blur_radius_x,
+                float                 blur_radius_y)
+{
+  const GskRoundedRect new_clip = GSK_ROUNDED_RECT_INIT (0, 0, texture_to_blur_width, texture_to_blur_height);
+  GskGLRenderTarget *pass1;
+  GskGLRenderTarget *pass2;
+  GskGLRenderState state;
+
+  g_assert (blur_radius_x > 0);
+  g_assert (blur_radius_y > 0);
+  g_assert (offscreen->texture_id > 0);
+  g_assert (offscreen->area.size.width > 0);
+  g_assert (offscreen->area.size.height > 0);
+
+  if (!gsk_next_driver_create_render_target (job->driver,
+                                             MAX (texture_to_blur_width, 1),
+                                             MAX (texture_to_blur_height, 1),
+                                             GL_NEAREST, GL_NEAREST,
+                                             &pass1))
+    return 0;
+
+  if (texture_to_blur_width <= 0 || texture_to_blur_height <= 0)
+    return gsk_next_driver_release_render_target (job->driver, pass1, FALSE);
+
+  if (!gsk_next_driver_create_render_target (job->driver,
+                                             texture_to_blur_width,
+                                             texture_to_blur_height,
+                                             GL_NEAREST, GL_NEAREST,
+                                             &pass2))
+    return gsk_next_driver_release_render_target (job->driver, pass1, FALSE);
+
+  gsk_gl_render_state_save (&state, job);
+
+  init_projection_matrix (&job->projection, &new_clip.bounds);
+  gsk_gl_render_job_set_modelview (job, NULL);
+  job->viewport = new_clip.bounds;
+  gsk_gl_render_job_push_clip (job, &new_clip);
+
+  /* Bind new framebuffer and clear it */
+  gsk_gl_command_queue_bind_framebuffer (job->command_queue, pass1->framebuffer_id);
+  gsk_gl_command_queue_clear (job->command_queue, 0, &job->viewport);
+
+  /* Begin drawing the first horizontal pass, using offscreen as the
+   * source texture for the program.
+   */
+  gsk_gl_program_begin_draw (job->driver->blur,
+                             &job->viewport,
+                             &job->projection,
+                             gsk_gl_render_job_get_modelview_matrix (job),
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
+  gsk_gl_program_set_uniform_texture (job->driver->blur,
+                                      UNIFORM_SHARED_SOURCE,
+                                      GL_TEXTURE_2D,
+                                      GL_TEXTURE0,
+                                      offscreen->texture_id);
+  gsk_gl_program_set_uniform1f (job->driver->blur,
+                                UNIFORM_BLUR_RADIUS,
+                                blur_radius_x);
+  gsk_gl_program_set_uniform2f (job->driver->blur,
+                                UNIFORM_BLUR_SIZE,
+                                texture_to_blur_width,
+                                texture_to_blur_height);
+  gsk_gl_program_set_uniform2f (job->driver->blur,
+                                UNIFORM_BLUR_DIR,
+                                1, 0);
+  gsk_gl_render_job_draw_coords (job, 0, 0, texture_to_blur_width, texture_to_blur_height);
+  gsk_gl_program_end_draw (job->driver->blur);
+
+  /* Bind second pass framebuffer and clear it */
+  gsk_gl_command_queue_bind_framebuffer (job->command_queue, pass2->framebuffer_id);
+  gsk_gl_command_queue_clear (job->command_queue, 0, &job->viewport);
+
+  /* Draw using blur program with first pass as source texture */
+  gsk_gl_program_begin_draw (job->driver->blur,
+                             &job->viewport,
+                             &job->projection,
+                             gsk_gl_render_job_get_modelview_matrix (job),
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
+  gsk_gl_program_set_uniform_texture (job->driver->blur,
+                                      UNIFORM_SHARED_SOURCE,
+                                      GL_TEXTURE_2D,
+                                      GL_TEXTURE0,
+                                      pass1->texture_id);
+  gsk_gl_program_set_uniform1f (job->driver->blur,
+                                UNIFORM_BLUR_RADIUS,
+                                blur_radius_y);
+  gsk_gl_program_set_uniform2f (job->driver->blur,
+                                UNIFORM_BLUR_SIZE,
+                                texture_to_blur_width,
+                                texture_to_blur_height);
+  gsk_gl_program_set_uniform2f (job->driver->blur,
+                                UNIFORM_BLUR_DIR,
+                                0, 1);
+  gsk_gl_render_job_draw_coords (job, 0, 0, texture_to_blur_width, texture_to_blur_height);
+  gsk_gl_program_end_draw (job->driver->blur);
+
+  gsk_gl_render_job_pop_modelview (job);
+  gsk_gl_render_job_pop_clip (job);
+
+  gsk_gl_render_state_restore (&state, job);
+
+  gsk_next_driver_release_render_target (job->driver, pass1, TRUE);
+
+  return gsk_next_driver_release_render_target (job->driver, pass2, FALSE);
+}
+
+static void
+blur_node (GskGLRenderJob       *job,
+           GskGLRenderOffscreen *offscreen,
+           GskRenderNode        *node,
+           float                 blur_radius,
+           float                *min_x,
+           float                *max_x,
+           float                *min_y,
+           float                *max_y)
+{
+  const float blur_extra = blur_radius * 2.0; /* 2.0 = shader radius_multiplier */
+  const float half_blur_extra = (blur_extra / 2.0);
+  float scale_x = job->scale_x;
+  float scale_y = job->scale_y;
+  float texture_width;
+  float texture_height;
+
+  g_assert (blur_radius > 0);
+
+  /* Increase texture size for the given blur radius and scale it */
+  texture_width  = ceilf ((node->bounds.size.width  + blur_extra));
+  texture_height = ceilf ((node->bounds.size.height + blur_extra));
+
+  /* Only blur this if the out region has no texture id yet */
+  if (offscreen->texture_id == 0)
+    {
+      const graphene_rect_t bounds = GRAPHENE_RECT_INIT (node->bounds.origin.x - half_blur_extra,
+                                                         node->bounds.origin.y - half_blur_extra,
+                                                         texture_width, texture_height);
+
+      offscreen->bounds = &bounds;
+      offscreen->reset_clip = TRUE;
+      offscreen->force_offscreen = TRUE;
+
+      if (!gsk_gl_render_job_visit_node_with_offscreen (job, node, offscreen))
+        g_assert_not_reached ();
+
+      /* Ensure that we actually got a real texture_id */
+      g_assert (offscreen->texture_id != 0);
+
+      /* If this wasn't FALSE, we'd have to release the texture */
+      g_assert (offscreen->do_not_cache == FALSE);
+
+      offscreen->texture_id = blur_offscreen (job,
+                                              offscreen,
+                                              texture_width * scale_x,
+                                              texture_height * scale_y,
+                                              blur_radius * scale_x,
+                                              blur_radius * scale_y);
+      init_full_texture_region (&offscreen->area);
+    }
+
+  *min_x = job->offset_x + node->bounds.origin.x - half_blur_extra;
+  *max_x = job->offset_x + node->bounds.origin.x + node->bounds.size.width + half_blur_extra;
+  *min_y = job->offset_y + node->bounds.origin.y - half_blur_extra;
+  *max_y = job->offset_y + node->bounds.origin.y + node->bounds.size.height + half_blur_extra;
+}
+
 static void
 gsk_gl_render_job_visit_color_node (GskGLRenderJob *job,
                                     GskRenderNode  *node)
@@ -1562,7 +1733,180 @@ static void
 gsk_gl_render_job_visit_blurred_inset_shadow_node (GskGLRenderJob *job,
                                                    GskRenderNode  *node)
 {
-  gsk_gl_render_job_visit_as_fallback (job, node);
+  const GskRoundedRect *node_outline = gsk_inset_shadow_node_get_outline (node);
+  float blur_radius = gsk_inset_shadow_node_get_blur_radius (node);
+  float offset_x = gsk_inset_shadow_node_get_dx (node);
+  float offset_y = gsk_inset_shadow_node_get_dy (node);
+  float scale_x = job->scale_x;
+  float scale_y = job->scale_y;
+  float blur_extra = blur_radius * 2.0; /* 2.0 = shader radius_multiplier */
+  float half_blur_extra = blur_radius;
+  float texture_width;
+  float texture_height;
+  int blurred_texture_id;
+  GskTextureKey key;
+  GskGLRenderOffscreen offscreen = {0};
+
+  g_assert (blur_radius > 0);
+
+  texture_width = ceilf ((node_outline->bounds.size.width + blur_extra) * scale_x);
+  texture_height = ceilf ((node_outline->bounds.size.height + blur_extra) * scale_y);
+
+  key.pointer = node;
+  key.pointer_is_child = FALSE;
+  key.scale_x = scale_x;
+  key.scale_y = scale_y;
+  key.filter = GL_NEAREST;
+
+  blurred_texture_id = gsk_next_driver_lookup_texture (job->driver, &key);
+
+  if (blurred_texture_id == 0)
+    {
+      float spread = gsk_inset_shadow_node_get_spread (node) + half_blur_extra;
+      GskRoundedRect outline_to_blur;
+      GskGLRenderTarget *render_target;
+      GskGLRenderState state;
+
+      /* TODO: In the following code, we have to be careful about where we apply the scale.
+       * We're manually scaling stuff (e.g. the outline) so we can later use texture_width
+       * and texture_height (which are already scaled) as the geometry and keep the modelview
+       * at a scale of 1. That's kinda complicated though... */
+
+      /* Outline of what we actually want to blur later.
+       * Spread grows inside, so we don't need to account for that. But the blur will need
+       * to read outside of the inset shadow, so we need to draw some color in there. */
+      outline_to_blur = *node_outline;
+      gsk_rounded_rect_shrink (&outline_to_blur,
+                               -half_blur_extra,
+                               -half_blur_extra,
+                               -half_blur_extra,
+                               -half_blur_extra);
+
+      /* Fit to our texture */
+      outline_to_blur.bounds.origin.x = 0;
+      outline_to_blur.bounds.origin.y = 0;
+      outline_to_blur.bounds.size.width *= scale_x;
+      outline_to_blur.bounds.size.height *= scale_y;
+
+      for (guint i = 0; i < 4; i ++)
+        {
+          outline_to_blur.corner[i].width *= scale_x;
+          outline_to_blur.corner[i].height *= scale_y;
+        }
+
+      if (gsk_next_driver_create_render_target (job->driver,
+                                                texture_width, texture_height,
+                                                GL_NEAREST, GL_NEAREST,
+                                                &render_target))
+        g_assert_not_reached ();
+
+      gsk_gl_render_state_save (&state, job);
+
+      job->viewport.origin.x = 0;
+      job->viewport.origin.y = 0;
+      job->viewport.size.width = texture_width;
+      job->viewport.size.height = texture_height;
+
+      init_projection_matrix (&job->projection,
+                              &GRAPHENE_RECT_INIT (0, 0, texture_width, texture_height));
+      gsk_gl_render_job_set_modelview (job, NULL);
+      gsk_gl_render_job_push_clip (job, &GSK_ROUNDED_RECT_INIT (0, 0, texture_width, texture_height));
+
+      gsk_gl_command_queue_bind_framebuffer (job->command_queue, render_target->framebuffer_id);
+      gsk_gl_command_queue_clear (job->command_queue, 0, &job->viewport);
+
+      /* Actual inset shadow outline drawing */
+      gsk_gl_program_begin_draw (job->driver->inset_shadow,
+                                 &job->viewport,
+                                 &job->projection,
+                                 gsk_gl_render_job_get_modelview_matrix (job),
+                                 gsk_gl_render_job_get_clip (job),
+                                 job->alpha);
+      gsk_gl_program_set_uniform_rounded_rect (job->driver->inset_shadow,
+                                               UNIFORM_INSET_SHADOW_OUTLINE_RECT,
+                                               &outline_to_blur);
+      gsk_gl_program_set_uniform_color (job->driver->inset_shadow,
+                                        UNIFORM_INSET_SHADOW_COLOR,
+                                        gsk_inset_shadow_node_get_color (node));
+      gsk_gl_program_set_uniform1f (job->driver->inset_shadow,
+                                    UNIFORM_INSET_SHADOW_SPREAD,
+                                    spread * MAX (scale_x, scale_y));
+      gsk_gl_program_set_uniform2f (job->driver->inset_shadow,
+                                    UNIFORM_INSET_SHADOW_OFFSET,
+                                    offset_x * scale_x,
+                                    offset_y * scale_y);
+      gsk_gl_render_job_draw (job, 0, 0, texture_width, texture_height);
+      gsk_gl_program_end_draw (job->driver->inset_shadow);
+
+      gsk_gl_render_job_pop_modelview (job);
+      gsk_gl_render_job_pop_clip (job);
+
+      gsk_gl_render_state_restore (&state, job);
+
+      offscreen.texture_id = render_target->texture_id;
+      init_full_texture_region (&offscreen.area);
+
+      blurred_texture_id = blur_offscreen (job,
+                                           &offscreen,
+                                           texture_width,
+                                           texture_height,
+                                           blur_radius * scale_x,
+                                           blur_radius * scale_y);
+
+      gsk_next_driver_release_render_target (job->driver, render_target, TRUE);
+    }
+
+  g_assert (blurred_texture_id != 0);
+
+  /* Blur the rendered unblurred inset shadow */
+  /* Use a clip to cut away the unwanted parts outside of the original outline */
+  {
+    const gboolean needs_clip = !gsk_rounded_rect_is_rectilinear (node_outline);
+    const float tx1 = half_blur_extra * scale_x / texture_width;
+    const float tx2 = 1.0 - tx1;
+    const float ty1 = half_blur_extra * scale_y / texture_height;
+    const float ty2 = 1.0 - ty1;
+
+    gsk_next_driver_cache_texture (job->driver, &key, blurred_texture_id);
+
+    if (needs_clip)
+      {
+        GskRoundedRect node_clip;
+
+        gsk_gl_render_job_transform_bounds (job, &node_outline->bounds, &node_clip.bounds);
+
+        for (guint i = 0; i < 4; i ++)
+          {
+            node_clip.corner[i].width = node_outline->corner[i].width * scale_x;
+            node_clip.corner[i].height = node_outline->corner[i].height * scale_y;
+          }
+
+        gsk_gl_render_job_push_clip (job, &node_clip);
+      }
+
+    offscreen.was_offscreen = TRUE;
+    offscreen.area.origin.x = tx1;
+    offscreen.area.origin.y = ty1;
+    offscreen.area.size.width = tx2 - tx1;
+    offscreen.area.size.height = ty2 - ty1;
+
+    gsk_gl_program_begin_draw (job->driver->blit,
+                               &job->viewport,
+                               &job->projection,
+                               gsk_gl_render_job_get_modelview_matrix (job),
+                               gsk_gl_render_job_get_clip (job),
+                               job->alpha);
+    gsk_gl_program_set_uniform_texture (job->driver->blit,
+                                        UNIFORM_SHARED_SOURCE,
+                                        GL_TEXTURE_2D,
+                                        GL_TEXTURE0,
+                                        blurred_texture_id);
+    gsk_gl_render_job_load_vertices_from_offscreen (job, &node->bounds, &offscreen);
+    gsk_gl_program_end_draw (job->driver->blit);
+
+    if (needs_clip)
+      gsk_gl_render_job_pop_clip (job);
+  }
 }
 
 static void
@@ -1788,177 +2132,6 @@ gsk_gl_render_job_visit_shadow_node (GskGLRenderJob *job,
                                      GskRenderNode  *node)
 {
   gsk_gl_render_job_visit_as_fallback (job, node);
-}
-
-static inline guint
-blur_offscreen (GskGLRenderJob       *job,
-                GskGLRenderOffscreen *offscreen,
-                int                   texture_to_blur_width,
-                int                   texture_to_blur_height,
-                float                 blur_radius_x,
-                float                 blur_radius_y)
-{
-  const GskRoundedRect new_clip = GSK_ROUNDED_RECT_INIT (0, 0, texture_to_blur_width, texture_to_blur_height);
-  GskGLRenderTarget *pass1;
-  GskGLRenderTarget *pass2;
-  GskGLRenderState state;
-
-  g_assert (blur_radius_x > 0);
-  g_assert (blur_radius_y > 0);
-  g_assert (offscreen->texture_id > 0);
-  g_assert (offscreen->area.size.width > 0);
-  g_assert (offscreen->area.size.height > 0);
-
-  if (!gsk_next_driver_create_render_target (job->driver,
-                                             MAX (texture_to_blur_width, 1),
-                                             MAX (texture_to_blur_height, 1),
-                                             GL_NEAREST, GL_NEAREST,
-                                             &pass1))
-    return 0;
-
-  if (texture_to_blur_width <= 0 || texture_to_blur_height <= 0)
-    return gsk_next_driver_release_render_target (job->driver, pass1, FALSE);
-
-  if (!gsk_next_driver_create_render_target (job->driver,
-                                             texture_to_blur_width,
-                                             texture_to_blur_height,
-                                             GL_NEAREST, GL_NEAREST,
-                                             &pass2))
-    return gsk_next_driver_release_render_target (job->driver, pass1, FALSE);
-
-  gsk_gl_render_state_save (&state, job);
-
-  init_projection_matrix (&job->projection, &new_clip.bounds);
-  gsk_gl_render_job_set_modelview (job, NULL);
-  job->viewport = new_clip.bounds;
-  gsk_gl_render_job_push_clip (job, &new_clip);
-
-  /* Bind new framebuffer and clear it */
-  gsk_gl_command_queue_bind_framebuffer (job->command_queue, pass1->framebuffer_id);
-  gsk_gl_command_queue_clear (job->command_queue, 0, &job->viewport);
-
-  /* Begin drawing the first horizontal pass, using offscreen as the
-   * source texture for the program.
-   */
-  gsk_gl_program_begin_draw (job->driver->blur,
-                             &job->viewport,
-                             &job->projection,
-                             gsk_gl_render_job_get_modelview_matrix (job),
-                             gsk_gl_render_job_get_clip (job),
-                             job->alpha);
-  gsk_gl_program_set_uniform_texture (job->driver->blur,
-                                      UNIFORM_SHARED_SOURCE,
-                                      GL_TEXTURE_2D,
-                                      GL_TEXTURE0,
-                                      offscreen->texture_id);
-  gsk_gl_program_set_uniform1f (job->driver->blur,
-                                UNIFORM_BLUR_RADIUS,
-                                blur_radius_x);
-  gsk_gl_program_set_uniform2f (job->driver->blur,
-                                UNIFORM_BLUR_SIZE,
-                                texture_to_blur_width,
-                                texture_to_blur_height);
-  gsk_gl_program_set_uniform2f (job->driver->blur,
-                                UNIFORM_BLUR_DIR,
-                                1, 0);
-  gsk_gl_render_job_draw_coords (job, 0, 0, texture_to_blur_width, texture_to_blur_height);
-  gsk_gl_program_end_draw (job->driver->blur);
-
-  /* Bind second pass framebuffer and clear it */
-  gsk_gl_command_queue_bind_framebuffer (job->command_queue, pass2->framebuffer_id);
-  gsk_gl_command_queue_clear (job->command_queue, 0, &job->viewport);
-
-  /* Draw using blur program with first pass as source texture */
-  gsk_gl_program_begin_draw (job->driver->blur,
-                             &job->viewport,
-                             &job->projection,
-                             gsk_gl_render_job_get_modelview_matrix (job),
-                             gsk_gl_render_job_get_clip (job),
-                             job->alpha);
-  gsk_gl_program_set_uniform_texture (job->driver->blur,
-                                      UNIFORM_SHARED_SOURCE,
-                                      GL_TEXTURE_2D,
-                                      GL_TEXTURE0,
-                                      pass1->texture_id);
-  gsk_gl_program_set_uniform1f (job->driver->blur,
-                                UNIFORM_BLUR_RADIUS,
-                                blur_radius_y);
-  gsk_gl_program_set_uniform2f (job->driver->blur,
-                                UNIFORM_BLUR_SIZE,
-                                texture_to_blur_width,
-                                texture_to_blur_height);
-  gsk_gl_program_set_uniform2f (job->driver->blur,
-                                UNIFORM_BLUR_DIR,
-                                0, 1);
-  gsk_gl_render_job_draw_coords (job, 0, 0, texture_to_blur_width, texture_to_blur_height);
-  gsk_gl_program_end_draw (job->driver->blur);
-
-  gsk_gl_render_job_pop_modelview (job);
-  gsk_gl_render_job_pop_clip (job);
-
-  gsk_gl_render_state_restore (&state, job);
-
-  gsk_next_driver_release_render_target (job->driver, pass1, TRUE);
-
-  return gsk_next_driver_release_render_target (job->driver, pass2, FALSE);
-}
-
-static void
-blur_node (GskGLRenderJob       *job,
-           GskGLRenderOffscreen *offscreen,
-           GskRenderNode        *node,
-           float                 blur_radius,
-           float                *min_x,
-           float                *max_x,
-           float                *min_y,
-           float                *max_y)
-{
-  const float blur_extra = blur_radius * 2.0; /* 2.0 = shader radius_multiplier */
-  const float half_blur_extra = (blur_extra / 2.0);
-  float scale_x = job->scale_x;
-  float scale_y = job->scale_y;
-  float texture_width;
-  float texture_height;
-
-  g_assert (blur_radius > 0);
-
-  /* Increase texture size for the given blur radius and scale it */
-  texture_width  = ceilf ((node->bounds.size.width  + blur_extra));
-  texture_height = ceilf ((node->bounds.size.height + blur_extra));
-
-  /* Only blur this if the out region has no texture id yet */
-  if (offscreen->texture_id == 0)
-    {
-      const graphene_rect_t bounds = GRAPHENE_RECT_INIT (node->bounds.origin.x - half_blur_extra,
-                                                         node->bounds.origin.y - half_blur_extra,
-                                                         texture_width, texture_height);
-
-      offscreen->bounds = &bounds;
-      offscreen->reset_clip = TRUE;
-      offscreen->force_offscreen = TRUE;
-
-      if (!gsk_gl_render_job_visit_node_with_offscreen (job, node, offscreen))
-        g_assert_not_reached ();
-
-      /* Ensure that we actually got a real texture_id */
-      g_assert (offscreen->texture_id != 0);
-
-      /* If this wasn't FALSE, we'd have to release the texture */
-      g_assert (offscreen->do_not_cache == FALSE);
-
-      offscreen->texture_id = blur_offscreen (job,
-                                              offscreen,
-                                              texture_width * scale_x,
-                                              texture_height * scale_y,
-                                              blur_radius * scale_x,
-                                              blur_radius * scale_y);
-      init_full_texture_region (&offscreen->area);
-    }
-
-  *min_x = job->offset_x + node->bounds.origin.x - half_blur_extra;
-  *max_x = job->offset_x + node->bounds.origin.x + node->bounds.size.width + half_blur_extra;
-  *min_y = job->offset_y + node->bounds.origin.y - half_blur_extra;
-  *max_y = job->offset_y + node->bounds.origin.y + node->bounds.size.height + half_blur_extra;
 }
 
 static void
