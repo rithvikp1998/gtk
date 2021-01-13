@@ -136,6 +136,9 @@ gsk_next_driver_dispose (GObject *object)
 {
   GskNextDriver *self = (GskNextDriver *)object;
 
+  g_assert (GSK_IS_NEXT_DRIVER (self));
+  g_assert (self->in_frame == FALSE);
+
 #define GSK_GL_NO_UNIFORMS
 #define GSK_GL_ADD_UNIFORM(pos, KEY, name)
 #define GSK_GL_DEFINE_PROGRAM(name, resource, uniforms) \
@@ -156,7 +159,12 @@ gsk_next_driver_dispose (GObject *object)
       g_clear_object (&self->command_queue);
     }
 
-  g_assert (self->autorelease_framebuffers->len == 0);
+  if (self->autorelease_framebuffers->len > 0)
+    {
+      glDeleteFramebuffers (self->autorelease_framebuffers->len,
+                            (GLuint *)(gpointer)self->autorelease_framebuffers->data);
+      self->autorelease_framebuffers->len = 0;
+    }
 
   g_clear_pointer (&self->autorelease_framebuffers, g_array_unref);
   g_clear_pointer (&self->key_to_texture_id, g_hash_table_unref);
@@ -360,13 +368,15 @@ gsk_next_driver_end_frame (GskNextDriver *self)
   gsk_gl_texture_library_end_frame (GSK_GL_TEXTURE_LIBRARY (self->glyphs));
   gsk_gl_texture_library_end_frame (GSK_GL_TEXTURE_LIBRARY (self->shadows));
 
-  for (guint i = 0; i < self->render_targets->len; i++)
+  while (self->render_targets->len > 0)
     {
-      GskGLRenderTarget *render_target = g_ptr_array_index (self->render_targets, i);
+      GskGLRenderTarget *render_target = g_ptr_array_index (self->render_targets, self->render_targets->len - 1);
 
       gsk_next_driver_autorelease_framebuffer (self, render_target->framebuffer_id);
       glDeleteTextures (1, &render_target->texture_id);
       g_slice_free (GskGLRenderTarget, render_target);
+
+      self->render_targets->len--;
     }
 
   if (self->autorelease_framebuffers->len > 0)
