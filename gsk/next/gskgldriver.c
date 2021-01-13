@@ -263,14 +263,13 @@ failure:
  * @self: a #GskNextDriver
  * @framebuffer_id: the id of the OpenGL framebuffer
  *
- * Marks @framebuffer_id to be deleted when the current frame
- * has completed.
+ * Marks @framebuffer_id to be deleted when the current frame has cmopleted.
  */
-void
+static void
 gsk_next_driver_autorelease_framebuffer (GskNextDriver *self,
                                          guint          framebuffer_id)
 {
-  g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
+  g_assert (GSK_IS_NEXT_DRIVER (self));
 
   g_array_append_val (self->autorelease_framebuffers, framebuffer_id);
 }
