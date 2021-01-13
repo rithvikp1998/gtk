@@ -101,6 +101,8 @@ void           gsk_next_driver_autorelease_framebuffer (GskNextDriver        *se
 gboolean       gsk_next_driver_create_render_target    (GskNextDriver        *self,
                                                         int                   width,
                                                         int                   height,
+                                                        int                   min_filter,
+                                                        int                   mag_filter,
                                                         guint                *out_fbo_id,
                                                         guint                *out_texture_id);
 void           gsk_next_driver_begin_frame             (GskNextDriver        *self);

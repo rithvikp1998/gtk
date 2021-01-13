@@ -133,6 +133,8 @@ guint              gsk_gl_command_queue_create_framebuffer   (GskGLCommandQueue 
 gboolean           gsk_gl_command_queue_create_render_target (GskGLCommandQueue        *self,
                                                               int                       width,
                                                               int                       height,
+                                                              int                       min_filter,
+                                                              int                       mag_filter,
                                                               guint                    *out_fbo_id,
                                                               guint                    *out_texture_id);
 void               gsk_gl_command_queue_delete_program       (GskGLCommandQueue        *self,

@@ -261,10 +261,9 @@ gsk_gl_renderer_render_texture (GskRenderer           *renderer,
   gdk_gl_context_make_current (context);
 
   if (!gsk_next_driver_create_render_target (self->driver,
-                                             width,
-                                             height,
-                                             &fbo_id,
-                                             &texture_id))
+                                             width, height,
+                                             GL_NEAREST, GL_NEAREST,
+                                             &fbo_id, &texture_id))
     return NULL;
 
   gsk_next_driver_autorelease_framebuffer (self->driver, fbo_id);

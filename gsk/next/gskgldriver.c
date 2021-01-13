@@ -383,6 +383,8 @@ gsk_next_driver_get_context (GskNextDriver *self)
  * @self: a #GskNextDriver
  * @width: the width for the render target
  * @height: the height for the render target
+ * @min_filter: the min filter to use for the texture
+ * @mag_filter: the mag filter to use for the texture
  * @out_fbo_id: (out): location for framebuffer id
  * @out_texture_id: (out): location for texture id
  *
@@ -396,6 +398,8 @@ gboolean
 gsk_next_driver_create_render_target (GskNextDriver *self,
                                       int            width,
                                       int            height,
+                                      int            min_filter,
+                                      int            mag_filter,
                                       guint         *out_fbo_id,
                                       guint         *out_texture_id)
 {
@@ -405,6 +409,8 @@ gsk_next_driver_create_render_target (GskNextDriver *self,
   return gsk_gl_command_queue_create_render_target (self->command_queue,
                                                     width,
                                                     height,
+                                                    min_filter,
+                                                    mag_filter,
                                                     out_fbo_id,
                                                     out_texture_id);
 }

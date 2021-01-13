@@ -843,6 +843,8 @@ gboolean
 gsk_gl_command_queue_create_render_target (GskGLCommandQueue *self,
                                            int                width,
                                            int                height,
+                                           int                min_filter,
+                                           int                mag_filter,
                                            guint             *out_fbo_id,
                                            guint             *out_texture_id)
 {
@@ -857,7 +859,9 @@ gsk_gl_command_queue_create_render_target (GskGLCommandQueue *self,
 
   gsk_gl_command_queue_save (self);
 
-  texture_id = gsk_gl_command_queue_create_texture (self, width, height, GL_NEAREST, GL_NEAREST);
+  texture_id = gsk_gl_command_queue_create_texture (self,
+                                                    width, height,
+                                                    min_filter, mag_filter);
 
   if (texture_id == -1)
     {
