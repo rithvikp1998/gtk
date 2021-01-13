@@ -21,7 +21,7 @@
 #ifndef _GSK_GL_TEXTURE_POOL_PRIVATE_H__
 #define _GSK_GL_TEXTURE_POOL_PRIVATE_H__
 
-#include "gskgltypes.h"
+#include "gskgltypesprivate.h"
 
 G_BEGIN_DECLS
 

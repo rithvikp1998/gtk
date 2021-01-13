@@ -21,7 +21,7 @@
 #ifndef __GSK_GL_RENDER_JOB_H__
 #define __GSK_GL_RENDER_JOB_H__
 
-#include "gskgltypes.h"
+#include "gskgltypesprivate.h"
 
 GskGLRenderJob *gsk_gl_render_job_new                 (GskNextDriver         *driver,
                                                        const graphene_rect_t *viewport,

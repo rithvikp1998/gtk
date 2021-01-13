@@ -21,7 +21,7 @@
 #ifndef __GSK_GL_PROGRAM_PRIVATE_H__
 #define __GSK_GL_PROGRAM_PRIVATE_H__
 
-#include "gskgltypes.h"
+#include "gskgltypesprivate.h"
 
 #include "gskglcommandqueueprivate.h"
 

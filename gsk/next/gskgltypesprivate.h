@@ -1,4 +1,4 @@
-/* gskgltypes.h
+/* gskgltypesprivate.h
  *
  * Copyright 2020 Christian Hergert <chergert@redhat.com>
  *
@@ -18,8 +18,8 @@
  * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
-#ifndef GSK_GL_TYPES_H
-#define GSK_GL_TYPES_H
+#ifndef __GSK_GL_TYPES_PRIVATE_H__
+#define __GSK_GL_TYPES_PRIVATE_H__
 
 #include <graphene.h>
 #include <epoxy/gl.h>
@@ -35,15 +35,16 @@ typedef struct _GskGLBuffer GskGLBuffer;
 typedef struct _GskGLCommandQueue GskGLCommandQueue;
 typedef struct _GskGLCompiler GskGLCompiler;
 typedef struct _GskGLDrawVertex GskGLDrawVertex;
+typedef struct _GskGLFramebuffer GskGLFramebuffer;
 typedef struct _GskGLGlyphLibrary GskGLGlyphLibrary;
 typedef struct _GskGLIconLibrary GskGLIconLibrary;
 typedef struct _GskGLProgram GskGLProgram;
+typedef struct _GskGLRenderJob GskGLRenderJob;
 typedef struct _GskGLShadowLibrary GskGLShadowLibrary;
 typedef struct _GskGLTextureAtlas GskGLTextureAtlas;
 typedef struct _GskGLTextureLibrary GskGLTextureLibrary;
 typedef struct _GskGLUniformState GskGLUniformState;
 typedef struct _GskNextDriver GskNextDriver;
-typedef struct _GskGLRenderJob GskGLRenderJob;
 
 struct _GskGLDrawVertex
 {
@@ -53,4 +54,4 @@ struct _GskGLDrawVertex
 
 G_END_DECLS
 
-#endif /* GSK_GL_TYPES_H */
+#endif /* __GSK_GL_TYPES_PRIVATE_H__ */

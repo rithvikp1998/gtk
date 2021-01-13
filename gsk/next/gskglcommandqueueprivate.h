@@ -21,7 +21,7 @@
 #ifndef __GSK_GL_COMMAND_QUEUE_PRIVATE_H__
 #define __GSK_GL_COMMAND_QUEUE_PRIVATE_H__
 
-#include "gskgltypes.h"
+#include "gskgltypesprivate.h"
 
 #include "gskglattachmentstateprivate.h"
 #include "gskgluniformstateprivate.h"

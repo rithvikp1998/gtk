@@ -21,7 +21,7 @@
 #ifndef GSK_GL_UNIFORM_STATE_PRIVATE_H
 #define GSK_GL_UNIFORM_STATE_PRIVATE_H
 
-#include "gskgltypes.h"
+#include "gskgltypesprivate.h"
 
 G_BEGIN_DECLS
 
