@@ -38,7 +38,7 @@
 #include "gskglshadowlibraryprivate.h"
 #include "gskgltexturepoolprivate.h"
 
-#define TEXTURES_CACHED_FOR_N_FRAMES 5
+#define TEXTURES_CACHED_FOR_N_FRAMES 1
 
 G_DEFINE_TYPE (GskNextDriver, gsk_next_driver, G_TYPE_OBJECT)
 
@@ -121,7 +121,7 @@ gsk_next_driver_collect_unused_textures (GskNextDriver *self,
       if (t->user || t->permanent)
         continue;
 
-      if (t->last_used_in_frame <= watermark)
+      if (t->last_used_in_frame < watermark)
         {
           remove_texture_key_for_id (self, t->texture_id);
           g_hash_table_iter_remove (&iter);
