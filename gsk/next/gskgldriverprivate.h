@@ -59,6 +59,16 @@ typedef struct {
 
 G_DECLARE_FINAL_TYPE (GskNextDriver, gsk_next_driver, GSK, NEXT_DRIVER, GObject)
 
+struct _GskGLRenderTarget
+{
+  guint framebuffer_id;
+  guint texture_id;
+  int min_filter;
+  int mag_filter;
+  int width;
+  int height;
+};
+
 struct _GskNextDriver
 {
   GObject parent_instance;
@@ -77,6 +87,7 @@ struct _GskNextDriver
   GHashTable *texture_id_to_key;
 
   GArray *autorelease_framebuffers;
+  GPtrArray *render_targets;
 
 #define GSK_GL_NO_UNIFORMS
 #define GSK_GL_ADD_UNIFORM(pos, KEY, name)
@@ -103,8 +114,10 @@ gboolean       gsk_next_driver_create_render_target    (GskNextDriver        *se
                                                         int                   height,
                                                         int                   min_filter,
                                                         int                   mag_filter,
-                                                        guint                *out_fbo_id,
-                                                        guint                *out_texture_id);
+                                                        GskGLRenderTarget   **render_target);
+guint          gsk_next_driver_release_render_target   (GskNextDriver        *self,
+                                                        GskGLRenderTarget    *render_target,
+                                                        gboolean              release_texture);
 void           gsk_next_driver_begin_frame             (GskNextDriver        *self);
 void           gsk_next_driver_end_frame               (GskNextDriver        *self);
 guint          gsk_next_driver_lookup_texture          (GskNextDriver        *self,

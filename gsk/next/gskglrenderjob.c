@@ -1799,8 +1799,8 @@ blur_offscreen (GskGLRenderJob       *job,
                 float                 blur_radius_y)
 {
   const GskRoundedRect new_clip = GSK_ROUNDED_RECT_INIT (0, 0, texture_to_blur_width, texture_to_blur_height);
-  guint pass1_texture_id, pass1_framebuffer_id;
-  guint pass2_texture_id, pass2_framebuffer_id;
+  GskGLRenderTarget *pass1;
+  GskGLRenderTarget *pass2;
   GskGLRenderState state;
 
   g_assert (blur_radius_x > 0);
@@ -1809,26 +1809,22 @@ blur_offscreen (GskGLRenderJob       *job,
   g_assert (offscreen->area.size.width > 0);
   g_assert (offscreen->area.size.height > 0);
 
-  gsk_next_driver_create_render_target (job->driver,
-                                        MAX (texture_to_blur_width, 1),
-                                        MAX (texture_to_blur_height, 1),
-                                        GL_NEAREST, GL_NEAREST,
-                                        &pass1_framebuffer_id,
-                                        &pass1_texture_id);
-
-  gsk_next_driver_autorelease_framebuffer (job->driver, pass1_framebuffer_id);
+  if (!gsk_next_driver_create_render_target (job->driver,
+                                             MAX (texture_to_blur_width, 1),
+                                             MAX (texture_to_blur_height, 1),
+                                             GL_NEAREST, GL_NEAREST,
+                                             &pass1))
+    return 0;
 
   if (texture_to_blur_width <= 0 || texture_to_blur_height <= 0)
-    return pass1_texture_id;
+    return gsk_next_driver_release_render_target (job->driver, pass1, FALSE);
 
-  gsk_next_driver_create_render_target (job->driver,
-                                        texture_to_blur_width,
-                                        texture_to_blur_height,
-                                        GL_NEAREST, GL_NEAREST,
-                                        &pass2_framebuffer_id,
-                                        &pass2_texture_id);
-
-  gsk_next_driver_autorelease_framebuffer (job->driver, pass2_framebuffer_id);
+  if (!gsk_next_driver_create_render_target (job->driver,
+                                             texture_to_blur_width,
+                                             texture_to_blur_height,
+                                             GL_NEAREST, GL_NEAREST,
+                                             &pass2))
+    return gsk_next_driver_release_render_target (job->driver, pass1, FALSE);
 
   gsk_gl_render_state_save (&state, job);
 
@@ -1838,7 +1834,7 @@ blur_offscreen (GskGLRenderJob       *job,
   gsk_gl_render_job_push_clip (job, &new_clip);
 
   /* Bind new framebuffer and clear it */
-  gsk_gl_command_queue_bind_framebuffer (job->command_queue, pass1_framebuffer_id);
+  gsk_gl_command_queue_bind_framebuffer (job->command_queue, pass1->framebuffer_id);
   gsk_gl_command_queue_clear (job->command_queue, 0, &job->viewport);
 
   /* Begin drawing the first horizontal pass, using offscreen as the
@@ -1869,7 +1865,7 @@ blur_offscreen (GskGLRenderJob       *job,
   gsk_gl_program_end_draw (job->driver->blur);
 
   /* Bind second pass framebuffer and clear it */
-  gsk_gl_command_queue_bind_framebuffer (job->command_queue, pass2_framebuffer_id);
+  gsk_gl_command_queue_bind_framebuffer (job->command_queue, pass2->framebuffer_id);
   gsk_gl_command_queue_clear (job->command_queue, 0, &job->viewport);
 
   /* Draw using blur program with first pass as source texture */
@@ -1883,7 +1879,7 @@ blur_offscreen (GskGLRenderJob       *job,
                                       UNIFORM_SHARED_SOURCE,
                                       GL_TEXTURE_2D,
                                       GL_TEXTURE0,
-                                      pass1_texture_id);
+                                      pass1->texture_id);
   gsk_gl_program_set_uniform1f (job->driver->blur,
                                 UNIFORM_BLUR_RADIUS,
                                 blur_radius_y);
@@ -1902,9 +1898,9 @@ blur_offscreen (GskGLRenderJob       *job,
 
   gsk_gl_render_state_restore (&state, job);
 
-  /* TODO: Release bound fbo/texture pair */
+  gsk_next_driver_release_render_target (job->driver, pass1, TRUE);
 
-  return pass2_texture_id;
+  return gsk_next_driver_release_render_target (job->driver, pass2, FALSE);
 }
 
 static void
@@ -2441,29 +2437,31 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
       }
   }
 
-  guint framebuffer_id;
-  guint texture_id;
+  GskGLRenderTarget *render_target;
   GskGLRenderState state;
 
   gsk_gl_render_state_save (&state, job);
 
-  gsk_next_driver_create_render_target (job->driver,
-                                        width, height,
-                                        filter, filter,
-                                        &texture_id, &framebuffer_id);
+  if (!gsk_next_driver_create_render_target (job->driver,
+                                             width, height,
+                                             filter, filter,
+                                             &render_target))
+    g_assert_not_reached ();
 
   if (gdk_gl_context_has_debug (job->command_queue->context))
     {
       gdk_gl_context_label_object_printf (job->command_queue->context,
-                                          GL_TEXTURE, texture_id,
+                                          GL_TEXTURE,
+                                          render_target->texture_id,
                                           "Offscreen<%s> %d",
                                           g_type_name_from_instance ((GTypeInstance *) node),
-                                          texture_id);
+                                          render_target->texture_id);
       gdk_gl_context_label_object_printf (job->command_queue->context,
-                                          GL_FRAMEBUFFER, framebuffer_id,
+                                          GL_FRAMEBUFFER,
+                                          render_target->framebuffer_id,
                                           "Offscreen<%s> FB %d",
                                           g_type_name_from_instance ((GTypeInstance *) node),
-                                          framebuffer_id);
+                                          render_target->framebuffer_id);
     }
 
   job->viewport.origin.x = offscreen->bounds->origin.x * scale_x;
@@ -2471,7 +2469,7 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
   job->viewport.size.width = width;
   job->viewport.size.height = height;
 
-  gsk_gl_command_queue_bind_framebuffer (job->command_queue, framebuffer_id);
+  gsk_gl_command_queue_bind_framebuffer (job->command_queue, render_target->framebuffer_id);
   gsk_gl_command_queue_clear (job->command_queue, 0, &job->viewport);
 
   init_projection_matrix (&job->projection, &job->viewport);
@@ -2493,13 +2491,14 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
   gsk_gl_render_state_restore (&state, job);
 
   offscreen->was_offscreen = TRUE;
-  offscreen->texture_id = texture_id;
+  offscreen->texture_id = gsk_next_driver_release_render_target (job->driver,
+                                                                 render_target,
+                                                                 FALSE);
+
   init_full_texture_region (&offscreen->area);
 
-  gsk_next_driver_autorelease_framebuffer (job->driver, framebuffer_id);
-
   if (!offscreen->do_not_cache)
-    gsk_next_driver_cache_texture (job->driver, &key, texture_id);
+    gsk_next_driver_cache_texture (job->driver, &key, offscreen->texture_id);
 
   return TRUE;
 }

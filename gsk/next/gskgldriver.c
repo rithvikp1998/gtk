@@ -163,6 +163,7 @@ gsk_next_driver_dispose (GObject *object)
   g_clear_pointer (&self->textures, g_hash_table_unref);
   g_clear_pointer (&self->key_to_texture_id, g_hash_table_unref);
   g_clear_pointer (&self->texture_id_to_key, g_hash_table_unref);
+  g_clear_pointer (&self->render_targets, g_ptr_array_unref);
 
   G_OBJECT_CLASS (gsk_next_driver_parent_class)->dispose (object);
 }
@@ -186,6 +187,7 @@ gsk_next_driver_init (GskNextDriver *self)
                                                    g_free,
                                                    NULL);
   gsk_gl_texture_pool_init (&self->texture_pool);
+  self->render_targets = g_ptr_array_new ();
 }
 
 static gboolean
@@ -351,11 +353,22 @@ gsk_next_driver_end_frame (GskNextDriver *self)
   g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
   g_return_if_fail (self->in_frame == TRUE);
 
+  gdk_gl_context_make_current (self->command_queue->context);
+
   gsk_gl_command_queue_end_frame (self->command_queue);
 
   gsk_gl_texture_library_end_frame (GSK_GL_TEXTURE_LIBRARY (self->icons));
   gsk_gl_texture_library_end_frame (GSK_GL_TEXTURE_LIBRARY (self->glyphs));
   gsk_gl_texture_library_end_frame (GSK_GL_TEXTURE_LIBRARY (self->shadows));
+
+  for (guint i = 0; i < self->render_targets->len; i++)
+    {
+      GskGLRenderTarget *render_target = g_ptr_array_index (self->render_targets, i);
+
+      gsk_next_driver_autorelease_framebuffer (self, render_target->framebuffer_id);
+      glDeleteTextures (1, &render_target->texture_id);
+      g_slice_free (GskGLRenderTarget, render_target);
+    }
 
   if (self->autorelease_framebuffers->len > 0)
     {
@@ -376,43 +389,6 @@ gsk_next_driver_get_context (GskNextDriver *self)
   g_return_val_if_fail (GSK_IS_GL_COMMAND_QUEUE (self->command_queue), NULL);
 
   return gsk_gl_command_queue_get_context (self->command_queue);
-}
-
-/**
- * gsk_next_driver_create_render_target:
- * @self: a #GskNextDriver
- * @width: the width for the render target
- * @height: the height for the render target
- * @min_filter: the min filter to use for the texture
- * @mag_filter: the mag filter to use for the texture
- * @out_fbo_id: (out): location for framebuffer id
- * @out_texture_id: (out): location for texture id
- *
- * Creates a new render target where @out_texture_id is bound
- * to the framebuffer @out_fbo_id using glFramebufferTexture2D().
- *
- * Returns: %TRUE if successful; otherwise %FALSE and @out_fbo_id and
- *   @out_texture_id are undefined.
- */
-gboolean
-gsk_next_driver_create_render_target (GskNextDriver *self,
-                                      int            width,
-                                      int            height,
-                                      int            min_filter,
-                                      int            mag_filter,
-                                      guint         *out_fbo_id,
-                                      guint         *out_texture_id)
-{
-  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), FALSE);
-  g_return_val_if_fail (GSK_IS_GL_COMMAND_QUEUE (self->command_queue), FALSE);
-
-  return gsk_gl_command_queue_create_render_target (self->command_queue,
-                                                    width,
-                                                    height,
-                                                    min_filter,
-                                                    mag_filter,
-                                                    out_fbo_id,
-                                                    out_texture_id);
 }
 
 /**
@@ -681,4 +657,126 @@ gsk_next_driver_release_texture (GskNextDriver *self,
   g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
 
   gsk_gl_texture_pool_put (&self->texture_pool, texture);
+}
+
+/**
+ * gsk_next_driver_create_render_target:
+ * @self: a #GskNextDriver
+ * @width: the width for the render target
+ * @height: the height for the render target
+ * @min_filter: the min filter to use for the texture
+ * @mag_filter: the mag filter to use for the texture
+ * @out_render_target: (out): a location for the render target
+ *
+ * Creates a new render target which contains a framebuffer and a texture
+ * bound to that framebuffer of the size @width x @height and using the
+ * appropriate filters.
+ *
+ * Use gsk_next_driver_release_render_target() when you are finished with
+ * the render target to release it. You may steal the texture from the
+ * render target when releasing it.
+ *
+ * Returns: %TRUE if successful; otherwise %FALSE and @out_fbo_id and
+ *   @out_texture_id are undefined.
+ */
+gboolean
+gsk_next_driver_create_render_target (GskNextDriver      *self,
+                                      int                 width,
+                                      int                 height,
+                                      int                 min_filter,
+                                      int                 mag_filter,
+                                      GskGLRenderTarget **out_render_target)
+{
+  guint framebuffer_id;
+  guint texture_id;
+
+  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), FALSE);
+  g_return_val_if_fail (GSK_IS_GL_COMMAND_QUEUE (self->command_queue), FALSE);
+  g_return_val_if_fail (out_render_target != NULL, FALSE);
+
+  if (self->render_targets->len > 0)
+    {
+      for (guint i = self->render_targets->len; i > 0; i--)
+        {
+          GskGLRenderTarget *render_target = g_ptr_array_index (self->render_targets, i-1);
+
+          if (render_target->width == width &&
+              render_target->height == height &&
+              render_target->min_filter == min_filter &&
+              render_target->mag_filter == mag_filter)
+            {
+              *out_render_target = g_ptr_array_steal_index_fast (self->render_targets, i-1);
+              return TRUE;
+            }
+        }
+    }
+
+  if (gsk_gl_command_queue_create_render_target (self->command_queue,
+                                                 width, height,
+                                                 min_filter, mag_filter,
+                                                 &framebuffer_id, &texture_id))
+    {
+      GskGLRenderTarget *render_target;
+
+      render_target = g_slice_new0 (GskGLRenderTarget);
+      render_target->min_filter = min_filter;
+      render_target->mag_filter = mag_filter;
+      render_target->width = width;
+      render_target->height = height;
+      render_target->framebuffer_id = framebuffer_id;
+      render_target->texture_id = texture_id;
+
+      *out_render_target = render_target;
+
+      return TRUE;
+    }
+
+  *out_render_target = NULL;
+
+  return FALSE;
+}
+
+/**
+ * gsk_next_driver_release_render_target:
+ * @self: a #GskNextDriver
+ * @render_target: a #GskGLRenderTarget created with
+ *   gsk_next_driver_create_render_target().
+ * @release_texture: if the texture should also be released
+ *
+ * Releases a render target that was previously created. An attempt may
+ * be made to cache the render target so that future creations of render
+ * targets are performed faster.
+ *
+ * If @release_texture is %FALSE, the backing texture id is returned and
+ * the framebuffer is released. Otherwise, both the texture and framebuffer
+ * are released or cached until the end of the frame.
+ *
+ * This may be called when building the render job as the texture or
+ * framebuffer will not be removed immediately.
+ *
+ * Returns: a texture id if @release_texture is %FALSE, otherwise zero.
+ */
+guint
+gsk_next_driver_release_render_target (GskNextDriver     *self,
+                                       GskGLRenderTarget *render_target,
+                                       gboolean           release_texture)
+{
+  guint texture_id;
+
+  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), 0);
+  g_return_val_if_fail (render_target != NULL, 0);
+
+  if (release_texture)
+    {
+      texture_id = 0;
+      g_ptr_array_add (self->render_targets, render_target);
+    }
+  else
+    {
+      texture_id = render_target->texture_id;
+      gsk_next_driver_autorelease_framebuffer (self, render_target->framebuffer_id);
+      g_slice_free (GskGLRenderTarget, render_target);
+    }
+
+  return texture_id;
 }

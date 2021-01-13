@@ -244,10 +244,10 @@ gsk_gl_renderer_render_texture (GskRenderer           *renderer,
                                 const graphene_rect_t *viewport)
 {
   GskNextRenderer *self = (GskNextRenderer *)renderer;
+  GskGLRenderTarget *render_target;
   GskGLRenderJob *job;
   GdkGLContext *context;
-  GLuint fbo_id;
-  GLuint texture_id;
+  guint texture_id;
   int width;
   int height;
 
@@ -263,14 +263,14 @@ gsk_gl_renderer_render_texture (GskRenderer           *renderer,
   if (!gsk_next_driver_create_render_target (self->driver,
                                              width, height,
                                              GL_NEAREST, GL_NEAREST,
-                                             &fbo_id, &texture_id))
+                                             &render_target))
     return NULL;
 
-  gsk_next_driver_autorelease_framebuffer (self->driver, fbo_id);
-
-  job = gsk_gl_render_job_new (self->driver, viewport, 1, NULL, fbo_id);
+  job = gsk_gl_render_job_new (self->driver, viewport, 1, NULL, render_target->framebuffer_id);
   gsk_gl_render_job_render_flipped (job, root);
   gsk_gl_render_job_free (job);
+
+  texture_id = gsk_next_driver_release_render_target (self->driver, render_target, FALSE);
 
   return create_texture_from_texture (context, texture_id, width, height);
 }
