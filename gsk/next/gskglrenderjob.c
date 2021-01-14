@@ -24,7 +24,9 @@
 #include "config.h"
 
 #include <gdk/gdkglcontextprivate.h>
+#include <gdk/gdkrgbaprivate.h>
 #include <gsk/gskrendernodeprivate.h>
+#include <gsk/gskglshaderprivate.h>
 #include <gdk/gdktextureprivate.h>
 #include <gsk/gsktransformprivate.h>
 #include <math.h>
@@ -2313,7 +2315,137 @@ static void
 gsk_gl_render_job_visit_gl_shader_node (GskGLRenderJob *job,
                                         GskRenderNode  *node)
 {
-  gsk_gl_render_job_visit_as_fallback (job, node);
+  GError *error = NULL;
+  GskGLShader *shader;
+  GskGLProgram *program;
+  int n_children;
+
+  shader = gsk_gl_shader_node_get_shader (node);
+  program = gsk_next_driver_lookup_shader (job->driver, shader, &error);
+  n_children = gsk_gl_shader_node_get_n_children (node);
+
+  if G_UNLIKELY (program == NULL)
+    {
+      static const GdkRGBA pink = { 255 / 255., 105 / 255., 180 / 255., 1.0 };
+
+      if (g_object_get_data (G_OBJECT (shader), "gsk-did-warn") == NULL)
+        {
+          g_object_set_data (G_OBJECT (shader), "gsk-did-warn", GUINT_TO_POINTER (1));
+          g_warning ("Failed to compile gl shader: %s", error->message);
+        }
+
+      g_clear_error (&error);
+
+      gsk_gl_program_begin_draw (job->driver->color,
+                                 &job->viewport,
+                                 &job->projection,
+                                 gsk_gl_render_job_get_modelview_matrix (job),
+                                 gsk_gl_render_job_get_clip (job),
+                                 job->alpha);
+      gsk_gl_program_set_uniform_color (job->driver->color,
+                                        UNIFORM_COLOR_COLOR,
+                                        &pink);
+      gsk_gl_render_job_draw_rect (job, &node->bounds);
+      gsk_gl_program_end_draw (job->driver->color);
+    }
+  else
+    {
+      GskGLRenderOffscreen offscreens[4] = {0};
+      const GskGLUniform *uniforms;
+      const guint8 *base;
+      GBytes *args;
+      int n_uniforms;
+
+      g_assert (n_children < G_N_ELEMENTS (offscreens));
+
+      for (guint i = 0; i < n_children; i++)
+        {
+          GskRenderNode *child = gsk_gl_shader_node_get_child (node, i);
+
+          offscreens[i].bounds = &node->bounds;
+          offscreens[i].force_offscreen = TRUE;
+          offscreens[i].reset_clip = TRUE;
+
+          if (!gsk_gl_render_job_visit_node_with_offscreen (job, child, &offscreens[i]))
+            return;
+        }
+
+      args = gsk_gl_shader_node_get_args (node);
+      base = g_bytes_get_data (args, NULL);
+      uniforms = gsk_gl_shader_get_uniforms (shader, &n_uniforms);
+
+      gsk_gl_program_begin_draw (program,
+                                 &job->viewport,
+                                 &job->projection,
+                                 gsk_gl_render_job_get_modelview_matrix (job),
+                                 gsk_gl_render_job_get_clip (job),
+                                 job->alpha);
+      for (guint i = 0; i < n_children; i++)
+        gsk_gl_program_set_uniform_texture (program,
+                                            UNIFORM_CUSTOM_TEXTURE1 + i,
+                                            GL_TEXTURE_2D,
+                                            GL_TEXTURE0 + i,
+                                            offscreens[i].texture_id);
+      gsk_gl_program_set_uniform2f (program,
+                                    UNIFORM_CUSTOM_SIZE,
+                                    node->bounds.size.width,
+                                    node->bounds.size.height);
+      for (guint i = 0; i < n_uniforms; i++)
+        {
+          const GskGLUniform *u = &uniforms[i];
+          const guint8 *data = base + u->offset;
+
+          switch (u->type)
+            {
+            default:
+            case GSK_GL_UNIFORM_TYPE_NONE:
+              break;
+            case GSK_GL_UNIFORM_TYPE_FLOAT:
+              gsk_gl_command_queue_set_uniform1fv (job->command_queue,
+                                                   program->id,
+                                                   program->args_locations[i],
+                                                   1,
+                                                   (const float *)data);
+              break;
+            case GSK_GL_UNIFORM_TYPE_INT:
+              gsk_gl_command_queue_set_uniform1i (job->command_queue,
+                                                  program->id,
+                                                  program->args_locations[i],
+                                                  *(const gint32 *)data);
+              break;
+            case GSK_GL_UNIFORM_TYPE_UINT:
+            case GSK_GL_UNIFORM_TYPE_BOOL:
+              gsk_gl_command_queue_set_uniform1ui (job->command_queue,
+                                                   program->id,
+                                                   program->args_locations[i],
+                                                   *(const guint32 *)data);
+              break;
+            case GSK_GL_UNIFORM_TYPE_VEC2:
+              gsk_gl_command_queue_set_uniform2fv (job->command_queue,
+                                                   program->id,
+                                                   program->args_locations[i],
+                                                   1,
+                                                   (const float *)data);
+              break;
+            case GSK_GL_UNIFORM_TYPE_VEC3:
+              gsk_gl_command_queue_set_uniform3fv (job->command_queue,
+                                                   program->id,
+                                                   program->args_locations[i],
+                                                   1,
+                                                   (const float *)data);
+              break;
+            case GSK_GL_UNIFORM_TYPE_VEC4:
+              gsk_gl_command_queue_set_uniform4fv (job->command_queue,
+                                                   program->id,
+                                                   program->args_locations[i],
+                                                   1,
+                                                   (const float *)data);
+              break;
+            }
+        }
+      gsk_gl_render_job_draw_offscreen_rect (job, &node->bounds);
+      gsk_gl_program_end_draw (program);
+    }
 }
 
 static void
