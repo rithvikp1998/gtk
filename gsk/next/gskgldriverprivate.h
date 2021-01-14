@@ -38,6 +38,16 @@ enum {
   UNIFORM_SHARED_LAST
 };
 
+enum {
+  UNIFORM_CUSTOM_SIZE = UNIFORM_SHARED_LAST,
+  UNIFORM_CUSTOM_TEXTURE1,
+  UNIFORM_CUSTOM_TEXTURE2,
+  UNIFORM_CUSTOM_TEXTURE3,
+  UNIFORM_CUSTOM_TEXTURE4,
+
+  UNIFORM_CUSTOM_LAST
+};
+
 typedef struct {
   gpointer        pointer;
   float           scale_x;
@@ -82,9 +92,10 @@ struct _GskNextDriver
   GskGLShadowLibrary *shadows;
 
   GHashTable *textures;
-
   GHashTable *key_to_texture_id;
   GHashTable *texture_id_to_key;
+
+  GHashTable *shader_cache;
 
   GArray *autorelease_framebuffers;
   GPtrArray *render_targets;
@@ -139,6 +150,9 @@ GskGLTexture  *gsk_next_driver_acquire_texture       (GskNextDriver        *self
                                                       int                   mag_filter);
 void           gsk_next_driver_release_texture       (GskNextDriver        *self,
                                                       GskGLTexture         *texture);
+GskGLProgram  *gsk_next_driver_lookup_shader         (GskNextDriver        *self,
+                                                      GskGLShader          *shader,
+                                                      GError              **error);
 
 G_END_DECLS
 

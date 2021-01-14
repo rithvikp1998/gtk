@@ -24,9 +24,10 @@
 #include "config.h"
 
 #include <gdk/gdkglcontextprivate.h>
-#include <gdk/gdktextureprivate.h>
 #include <gdk/gdkgltextureprivate.h>
+#include <gdk/gdktextureprivate.h>
 #include <gsk/gskdebugprivate.h>
+#include <gsk/gskglshaderprivate.h>
 #include <gsk/gskrendererprivate.h>
 
 #include "gskglcommandqueueprivate.h"
@@ -132,6 +133,18 @@ gsk_next_driver_collect_unused_textures (GskNextDriver *self,
 }
 
 static void
+gsk_next_driver_shader_weak_cb (gpointer  data,
+                                GObject  *where_object_was)
+{
+  GskNextDriver *self = data;
+
+  g_assert (GSK_IS_NEXT_DRIVER (self));
+
+  if (self->shader_cache)
+    g_hash_table_remove (self->shader_cache, where_object_was);
+}
+
+static void
 gsk_next_driver_dispose (GObject *object)
 {
   GskNextDriver *self = (GskNextDriver *)object;
@@ -151,6 +164,24 @@ gsk_next_driver_dispose (GObject *object)
 #undef GSK_GL_NO_UNIFORMS
 #undef GSK_GL_ADD_UNIFORM
 #undef GSK_GL_DEFINE_PROGRAM
+
+  if (self->shader_cache != NULL)
+    {
+      GHashTableIter iter;
+      gpointer k, v;
+
+      g_hash_table_iter_init (&iter, self->shader_cache);
+      while (g_hash_table_iter_next (&iter, &k, &v))
+        {
+          GskGLShader *shader = k;
+          g_object_weak_unref (G_OBJECT (shader),
+                               gsk_next_driver_shader_weak_cb,
+                               self);
+          g_hash_table_iter_remove (&iter);
+        }
+
+      g_clear_pointer (&self->shader_cache, g_hash_table_unref);
+    }
 
   if (self->command_queue != NULL)
     {
@@ -172,6 +203,7 @@ gsk_next_driver_dispose (GObject *object)
   g_clear_pointer (&self->key_to_texture_id, g_hash_table_unref);
   g_clear_pointer (&self->texture_id_to_key, g_hash_table_unref);
   g_clear_pointer (&self->render_targets, g_ptr_array_unref);
+  g_clear_pointer (&self->shader_cache, g_hash_table_unref);
 
   G_OBJECT_CLASS (gsk_next_driver_parent_class)->dispose (object);
 }
@@ -194,6 +226,10 @@ gsk_next_driver_init (GskNextDriver *self)
                                                    texture_key_equal,
                                                    g_free,
                                                    NULL);
+  self->shader_cache = g_hash_table_new_full (NULL,
+                                              NULL,
+                                              g_object_unref,
+                                              g_object_unref);
   gsk_gl_texture_pool_init (&self->texture_pool);
   self->render_targets = g_ptr_array_new ();
 }
@@ -648,7 +684,7 @@ gsk_next_driver_acquire_texture (GskNextDriver *self,
 }
 
 /**
- * gsk_gl_driver_release_texture:
+ * gsk_next_driver_release_texture:
  * @self: a #GskNextDriver
  * @texture: a #GskGLTexture
  *
@@ -788,4 +824,106 @@ gsk_next_driver_release_render_target (GskNextDriver     *self,
     }
 
   return texture_id;
+}
+
+/**
+ * gsk_next_driver_lookup_shader:
+ * @self: a #GskNextDriver
+ * @shader: the shader to lookup or load
+ * @error: a location for a #GError, or %NULL
+ *
+ * Attepts to load @shader from the shader cache.
+ *
+ * If it has not been loaded, then it will compile the shader on demand.
+ *
+ * Returns: (transfer none): a #GskGLShader if successful; otherwise
+ *   %NULL and @error is set.
+ */
+GskGLProgram *
+gsk_next_driver_lookup_shader (GskNextDriver  *self,
+                               GskGLShader    *shader,
+                               GError        **error)
+{
+  GskGLProgram *program;
+
+  g_return_val_if_fail (self != NULL, NULL);
+  g_return_val_if_fail (shader != NULL, NULL);
+
+  program = g_hash_table_lookup (self->shader_cache, shader);
+
+  if (program == NULL)
+    {
+      const GskGLUniform *uniforms;
+      GskGLCompiler *compiler;
+      GBytes *suffix;
+      int n_required_textures;
+      int n_uniforms;
+
+      uniforms = gsk_gl_shader_get_uniforms (shader, &n_uniforms);
+      if (n_uniforms > G_N_ELEMENTS (program->args_locations))
+        {
+          g_set_error (error,
+                       GDK_GL_ERROR,
+                       GDK_GL_ERROR_UNSUPPORTED_FORMAT,
+                       "GLShaderNode supports max %d custom uniforms",
+                       (int)G_N_ELEMENTS (program->args_locations));
+          return NULL;
+        }
+
+      n_required_textures = gsk_gl_shader_get_n_textures (shader);
+      if (n_required_textures > G_N_ELEMENTS (program->texture_locations))
+        {
+          g_set_error (error,
+                       GDK_GL_ERROR,
+                       GDK_GL_ERROR_UNSUPPORTED_FORMAT,
+                       "GLShaderNode supports max %d texture sources",
+                       (int)(G_N_ELEMENTS (program->texture_locations)));
+          return NULL;
+        }
+
+      compiler = gsk_gl_compiler_new (self->command_queue, FALSE);
+      suffix = gsk_gl_shader_get_source (shader);
+
+      gsk_gl_compiler_set_preamble_from_resource (compiler,
+                                                  GSK_GL_COMPILER_ALL,
+                                                  "/org/gtk/libgsk/glsl/preamble.glsl");
+      gsk_gl_compiler_set_preamble_from_resource (compiler,
+                                                  GSK_GL_COMPILER_VERTEX,
+                                                  "/org/gtk/libgsk/glsl/preamble.vs.glsl");
+      gsk_gl_compiler_set_preamble_from_resource (compiler,
+                                                  GSK_GL_COMPILER_FRAGMENT,
+                                                  "/org/gtk/libgsk/glsl/preamble.fs.glsl");
+      gsk_gl_compiler_set_suffix (compiler, GSK_GL_COMPILER_FRAGMENT, suffix);
+
+      if ((program = gsk_gl_compiler_compile (compiler, NULL, NULL)))
+        {
+          gsk_gl_program_add_uniform (program, "u_size", UNIFORM_CUSTOM_SIZE);
+          gsk_gl_program_add_uniform (program, "u_texture1", UNIFORM_CUSTOM_TEXTURE1);
+          gsk_gl_program_add_uniform (program, "u_texture2", UNIFORM_CUSTOM_TEXTURE2);
+          gsk_gl_program_add_uniform (program, "u_texture3", UNIFORM_CUSTOM_TEXTURE3);
+          gsk_gl_program_add_uniform (program, "u_texture4", UNIFORM_CUSTOM_TEXTURE4);
+          for (guint i = 0; i < n_uniforms; i++)
+            gsk_gl_program_add_uniform (program, uniforms[i].name, UNIFORM_CUSTOM_LAST+i);
+
+          program->size_location = gsk_gl_program_get_uniform_location (program, UNIFORM_CUSTOM_SIZE);
+          program->texture_locations[0] = gsk_gl_program_get_uniform_location (program, UNIFORM_CUSTOM_TEXTURE1);
+          program->texture_locations[1] = gsk_gl_program_get_uniform_location (program, UNIFORM_CUSTOM_TEXTURE2);
+          program->texture_locations[2] = gsk_gl_program_get_uniform_location (program, UNIFORM_CUSTOM_TEXTURE3);
+          program->texture_locations[3] = gsk_gl_program_get_uniform_location (program, UNIFORM_CUSTOM_TEXTURE4);
+          for (guint i = 0; i < n_uniforms; i++)
+            program->args_locations[i] = gsk_gl_program_get_uniform_location (program, UNIFORM_CUSTOM_LAST+i);
+          for (guint i = n_uniforms; i < G_N_ELEMENTS (program->args_locations); i++)
+            program->args_locations[i] = -1;
+
+          g_hash_table_insert (self->shader_cache, shader, program);
+
+          g_object_weak_ref (G_OBJECT (shader),
+                             gsk_next_driver_shader_weak_cb,
+                             self);
+        }
+
+      g_object_unref (compiler);
+    }
+
+  return g_steal_pointer (&program);
 }

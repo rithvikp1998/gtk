@@ -33,16 +33,24 @@ G_DECLARE_FINAL_TYPE (GskGLProgram, gsk_gl_program, GSK, GL_PROGRAM, GObject)
 
 struct _GskGLProgram
 {
-  GObject            parent_instance;
-  int                id;
-  char              *name;
-  GArray            *uniform_locations;
+  GObject parent_instance;
+
+  int id;
+  char *name;
+  GArray *uniform_locations;
   GskGLCommandQueue *command_queue;
-  int                projection_location;
-  int                modelview_location;
-  int                viewport_location;
-  int                clip_rect_location;
-  int                alpha_location;
+
+  /* Cached shared locations */
+  int projection_location;
+  int modelview_location;
+  int viewport_location;
+  int clip_rect_location;
+  int alpha_location;
+
+  /* For custom programs */
+  int texture_locations[4];
+  int args_locations[8];
+  int size_location;
 };
 
 GskGLProgram *gsk_gl_program_new         (GskGLCommandQueue       *command_queue,
