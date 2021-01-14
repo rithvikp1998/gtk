@@ -895,7 +895,7 @@ gsk_next_driver_lookup_shader (GskNextDriver  *self,
                                                   "/org/gtk/libgsk/glsl/preamble.fs.glsl");
       gsk_gl_compiler_set_suffix (compiler, GSK_GL_COMPILER_FRAGMENT, suffix);
 
-      if ((program = gsk_gl_compiler_compile (compiler, NULL, NULL)))
+      if ((program = gsk_gl_compiler_compile (compiler, NULL, error)))
         {
           gsk_gl_program_add_uniform (program, "u_size", UNIFORM_CUSTOM_SIZE);
           gsk_gl_program_add_uniform (program, "u_texture1", UNIFORM_CUSTOM_TEXTURE1);
@@ -916,7 +916,6 @@ gsk_next_driver_lookup_shader (GskNextDriver  *self,
             program->args_locations[i] = -1;
 
           g_hash_table_insert (self->shader_cache, shader, program);
-
           g_object_weak_ref (G_OBJECT (shader),
                              gsk_next_driver_shader_weak_cb,
                              self);
