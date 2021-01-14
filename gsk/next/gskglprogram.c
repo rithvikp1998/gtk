@@ -34,7 +34,7 @@ gsk_gl_program_new (GskGLCommandQueue *command_queue,
 {
   GskGLProgram *self;
 
-  g_return_val_if_fail (program_id >= 0, NULL);
+  g_return_val_if_fail (program_id >= -1, NULL);
 
   self = g_object_new (GSK_TYPE_GL_PROGRAM, NULL);
   self->id = program_id;
