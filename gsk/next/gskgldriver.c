@@ -895,8 +895,20 @@ gsk_next_driver_lookup_shader (GskNextDriver  *self,
                                                   "/org/gtk/libgsk/glsl/preamble.fs.glsl");
       gsk_gl_compiler_set_suffix (compiler, GSK_GL_COMPILER_FRAGMENT, suffix);
 
+      /* Setup attributes that are provided via VBO */
+      gsk_gl_compiler_bind_attribute (compiler, "aPosition", 0);
+      gsk_gl_compiler_bind_attribute (compiler, "aUv", 1);
+
       if ((program = gsk_gl_compiler_compile (compiler, NULL, error)))
         {
+          gsk_gl_program_add_uniform (program, "u_source", UNIFORM_SHARED_SOURCE);
+          gsk_gl_program_add_uniform (program, "u_clip_rect", UNIFORM_SHARED_CLIP_RECT);
+          gsk_gl_program_add_uniform (program, "u_viewport", UNIFORM_SHARED_VIEWPORT);
+          gsk_gl_program_add_uniform (program, "u_projection", UNIFORM_SHARED_PROJECTION);
+          gsk_gl_program_add_uniform (program, "u_modelview", UNIFORM_SHARED_MODELVIEW);
+          if (gsk_gl_program_add_uniform (program, "u_alpha", UNIFORM_SHARED_ALPHA))
+            gsk_gl_program_set_uniform1f (program, UNIFORM_SHARED_ALPHA, 1.0f);
+
           gsk_gl_program_add_uniform (program, "u_size", UNIFORM_CUSTOM_SIZE);
           gsk_gl_program_add_uniform (program, "u_texture1", UNIFORM_CUSTOM_TEXTURE1);
           gsk_gl_program_add_uniform (program, "u_texture2", UNIFORM_CUSTOM_TEXTURE2);
