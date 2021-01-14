@@ -33,7 +33,7 @@ void            gsk_gl_render_job_render              (GskGLRenderJob        *jo
                                                        GskRenderNode         *root);
 void            gsk_gl_render_job_render_flipped      (GskGLRenderJob        *job,
                                                        GskRenderNode         *root);
-void            gsk_gl_render_job_set_debug_falllback (GskGLRenderJob        *job,
+void            gsk_gl_render_job_set_debug_fallback  (GskGLRenderJob        *job,
                                                        gboolean               debug_fallback);
 
 #endif /* __GSK_GL_RENDER_JOB_H__ */

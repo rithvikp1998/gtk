@@ -2780,8 +2780,8 @@ gsk_gl_render_job_render (GskGLRenderJob *job,
 }
 
 void
-gsk_gl_render_job_set_debug_falllback (GskGLRenderJob *job,
-                                       gboolean        debug_fallback)
+gsk_gl_render_job_set_debug_fallback (GskGLRenderJob *job,
+                                      gboolean        debug_fallback)
 {
   g_return_if_fail (job != NULL);
 
