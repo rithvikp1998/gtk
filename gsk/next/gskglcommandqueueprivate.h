@@ -155,6 +155,15 @@ GskGLDrawVertex   *gsk_gl_command_queue_add_vertices         (GskGLCommandQueue 
                                                               const GskGLDrawVertex     vertices[GSK_GL_N_VERTICES]);
 
 static inline void
+gsk_gl_command_queue_set_uniform1ui (GskGLCommandQueue *self,
+                                     guint              program,
+                                     guint              location,
+                                     int                value0)
+{
+  gsk_gl_uniform_state_set1ui (self->uniforms, program, location, value0);
+}
+
+static inline void
 gsk_gl_command_queue_set_uniform1i (GskGLCommandQueue *self,
                                     guint              program,
                                     guint              location,
@@ -239,6 +248,16 @@ gsk_gl_command_queue_set_uniform4f (GskGLCommandQueue *self,
 }
 
 static inline void
+gsk_gl_command_queue_set_uniform1fv (GskGLCommandQueue *self,
+                                     guint              program,
+                                     guint              location,
+                                     gsize              count,
+                                     const float       *value)
+{
+  gsk_gl_uniform_state_set1fv (self->uniforms, program, location, count, value);
+}
+
+static inline void
 gsk_gl_command_queue_set_uniform2fv (GskGLCommandQueue *self,
                                      guint              program,
                                      guint              location,
@@ -249,13 +268,13 @@ gsk_gl_command_queue_set_uniform2fv (GskGLCommandQueue *self,
 }
 
 static inline void
-gsk_gl_command_queue_set_uniform1fv (GskGLCommandQueue *self,
+gsk_gl_command_queue_set_uniform3fv (GskGLCommandQueue *self,
                                      guint              program,
                                      guint              location,
                                      gsize              count,
                                      const float       *value)
 {
-  gsk_gl_uniform_state_set1fv (self->uniforms, program, location, count, value);
+  gsk_gl_uniform_state_set3fv (self->uniforms, program, location, count, value);
 }
 
 static inline void

@@ -75,6 +75,8 @@ typedef enum _GskGLUniformKind
   GSK_GL_UNIFORM_FORMAT_3I,
   GSK_GL_UNIFORM_FORMAT_4I,
 
+  GSK_GL_UNIFORM_FORMAT_1UI,
+
   GSK_GL_UNIFORM_FORMAT_TEXTURE,
 
   GSK_GL_UNIFORM_FORMAT_MATRIX,
@@ -130,6 +132,10 @@ void               gsk_gl_uniform_state_set4fv           (GskGLUniformState     
                                                           guint                      location,
                                                           guint                      count,
                                                           const float               *value);
+void               gsk_gl_uniform_state_set1ui           (GskGLUniformState         *state,
+                                                          guint                      program,
+                                                          guint                      location,
+                                                          guint                      value0);
 void               gsk_gl_uniform_state_set1i            (GskGLUniformState         *state,
                                                           guint                      program,
                                                           guint                      location,

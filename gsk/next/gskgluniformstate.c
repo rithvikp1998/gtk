@@ -36,6 +36,8 @@ typedef struct { int v0; int v1; } Uniform2i;
 typedef struct { int v0; int v1; int v2; } Uniform3i;
 typedef struct { int v0; int v1; int v2; int v3; } Uniform4i;
 
+typedef struct { guint v0; } Uniform1ui;
+
 static guint8 uniform_sizes[] = {
   0,
 
@@ -53,6 +55,8 @@ static guint8 uniform_sizes[] = {
   sizeof (Uniform2i),
   sizeof (Uniform3i),
   sizeof (Uniform4i),
+
+  sizeof (Uniform1ui),
 
   sizeof (guint),
 
@@ -344,6 +348,29 @@ gsk_gl_uniform_state_set4f (GskGLUniformState *state,
           u->v1 = value1;
           u->v2 = value2;
           u->v3 = value3;
+          program_changed (state, info, program);
+        }
+    }
+}
+
+void
+gsk_gl_uniform_state_set1ui (GskGLUniformState *state,
+                             guint              program,
+                             guint              location,
+                             guint              value0)
+{
+  Uniform1ui *u;
+  GskGLUniformInfo *info;
+
+  g_assert (state != NULL);
+  g_assert (program > 0);
+
+  if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_1UI, 1, location, &info)))
+    {
+      if (u->v0 != value0)
+        {
+          REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_1UI, 1);
+          u->v0 = value0;
           program_changed (state, info, program);
         }
     }
