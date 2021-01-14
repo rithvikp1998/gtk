@@ -226,6 +226,11 @@ gsk_gl_renderer_render (GskRenderer          *renderer,
 
   gdk_draw_context_begin_frame (GDK_DRAW_CONTEXT (context), update_area);
   job = gsk_gl_render_job_new (self->driver, &viewport, scale_factor, render_region, 0);
+#ifdef G_ENABLE_DEBUG
+  if (GSK_RENDERER_DEBUG_CHECK (GSK_RENDERER (self), FALLBACK))
+    gsk_gl_render_job_set_debug_fallback (job, TRUE);
+#endif
+
   gsk_gl_render_job_render (job, root);
   gdk_draw_context_end_frame (GDK_DRAW_CONTEXT (context));
 
