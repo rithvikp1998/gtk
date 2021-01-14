@@ -2312,6 +2312,25 @@ gsk_gl_render_job_visit_color_matrix_node (GskGLRenderJob *job,
 }
 
 static void
+gsk_gl_render_job_visit_gl_shader_node_fallback (GskGLRenderJob *job,
+                                                 GskRenderNode  *node)
+{
+  static const GdkRGBA pink = { 255 / 255., 105 / 255., 180 / 255., 1.0 };
+
+  gsk_gl_program_begin_draw (job->driver->color,
+                             &job->viewport,
+                             &job->projection,
+                             gsk_gl_render_job_get_modelview_matrix (job),
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
+  gsk_gl_program_set_uniform_color (job->driver->color,
+                                    UNIFORM_COLOR_COLOR,
+                                    &pink);
+  gsk_gl_render_job_draw_rect (job, &node->bounds);
+  gsk_gl_program_end_draw (job->driver->color);
+}
+
+static void
 gsk_gl_render_job_visit_gl_shader_node (GskGLRenderJob *job,
                                         GskRenderNode  *node)
 {
@@ -2326,27 +2345,13 @@ gsk_gl_render_job_visit_gl_shader_node (GskGLRenderJob *job,
 
   if G_UNLIKELY (program == NULL)
     {
-      static const GdkRGBA pink = { 255 / 255., 105 / 255., 180 / 255., 1.0 };
-
       if (g_object_get_data (G_OBJECT (shader), "gsk-did-warn") == NULL)
         {
           g_object_set_data (G_OBJECT (shader), "gsk-did-warn", GUINT_TO_POINTER (1));
           g_warning ("Failed to compile gl shader: %s", error->message);
         }
-
+      gsk_gl_render_job_visit_gl_shader_node_fallback (job, node);
       g_clear_error (&error);
-
-      gsk_gl_program_begin_draw (job->driver->color,
-                                 &job->viewport,
-                                 &job->projection,
-                                 gsk_gl_render_job_get_modelview_matrix (job),
-                                 gsk_gl_render_job_get_clip (job),
-                                 job->alpha);
-      gsk_gl_program_set_uniform_color (job->driver->color,
-                                        UNIFORM_COLOR_COLOR,
-                                        &pink);
-      gsk_gl_render_job_draw_rect (job, &node->bounds);
-      gsk_gl_program_end_draw (job->driver->color);
     }
   else
     {
