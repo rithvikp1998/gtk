@@ -24,8 +24,9 @@
 #include "config.h"
 
 #include <gdk/gdkglcontextprivate.h>
-#include <gdk/gdktextureprivate.h>
 #include <gsk/gskrendernodeprivate.h>
+#include <gdk/gdktextureprivate.h>
+#include <gsk/gsktransformprivate.h>
 #include <math.h>
 #include <string.h>
 
@@ -1614,6 +1615,38 @@ gsk_gl_render_job_visit_border_node (GskGLRenderJob *job,
   }
 }
 
+/* Returns TRUE if applying @transform to @bounds
+ * yields an axis-aligned rectangle
+ */
+static gboolean
+result_is_axis_aligned (GskTransform          *transform,
+                        const graphene_rect_t *bounds)
+{
+  graphene_matrix_t m;
+  graphene_quad_t q;
+  graphene_rect_t b;
+  graphene_point_t b1, b2;
+  const graphene_point_t *p;
+  int i;
+
+  gsk_transform_to_matrix (transform, &m);
+  gsk_matrix_transform_rect (&m, bounds, &q);
+  graphene_quad_bounds (&q, &b);
+  graphene_rect_get_top_left (&b, &b1);
+  graphene_rect_get_bottom_right (&b, &b2);
+
+  for (i = 0; i < 4; i++)
+    {
+      p = graphene_quad_get_point (&q, i);
+      if (fabs (p->x - b1.x) > FLT_EPSILON && fabs (p->x - b2.x) > FLT_EPSILON)
+        return FALSE;
+      if (fabs (p->y - b1.y) > FLT_EPSILON && fabs (p->y - b2.y) > FLT_EPSILON)
+        return FALSE;
+    }
+
+  return TRUE;
+}
+
 static void
 gsk_gl_render_job_visit_transform_node (GskGLRenderJob *job,
                                         GskRenderNode  *node)
@@ -1651,50 +1684,49 @@ gsk_gl_render_job_visit_transform_node (GskGLRenderJob *job,
     case GSK_TRANSFORM_CATEGORY_3D:
     case GSK_TRANSFORM_CATEGORY_ANY:
     case GSK_TRANSFORM_CATEGORY_UNKNOWN:
-#if 0
-      {
-        TextureRegion region;
-        gboolean is_offscreen;
+      if (node_supports_transform (child))
+        {
+          gsk_gl_render_job_push_modelview (job, transform);
+          gsk_gl_render_job_visit_node (job, child);
+          gsk_gl_render_job_pop_modelview (job);
+        }
+      else
+        {
+          GskGLRenderOffscreen offscreen = {0};
 
-        if (node_supports_transform (child))
-          {
-            ops_push_modelview (builder, node_transform);
-            gsk_gl_renderer_add_render_ops (self, child, builder);
-            ops_pop_modelview (builder);
-          }
-        else
-          {
-            int filter_flag = 0;
+          offscreen.bounds = &child->bounds;
+          offscreen.reset_clip = TRUE;
 
-            if (!result_is_axis_aligned (node_transform, &child->bounds))
-              filter_flag = LINEAR_FILTER;
+          if (!result_is_axis_aligned (transform, &child->bounds))
+            offscreen.linear_filter = TRUE;
 
-            if (add_offscreen_ops (self, builder,
-                                   &child->bounds,
-                                   child,
-                                   &region, &is_offscreen,
-                                   RESET_CLIP | filter_flag))
-              {
-                /* For non-trivial transforms, we draw everything on a texture and then
-                 * draw the texture transformed. */
-                /* TODO: We should compute a modelview containing only the "non-trivial"
-                 *       part (e.g. the rotation) and use that. We want to keep the scale
-                 *       for the texture.
-                 */
-                ops_push_modelview (builder, node_transform);
-                ops_set_texture (builder, region.texture_id);
-                ops_set_program (builder, &self->programs->blit_program);
+          if (gsk_gl_render_job_visit_node_with_offscreen (job, child, &offscreen))
+            {
+              /* For non-trivial transforms, we draw everything on a texture and then
+               * draw the texture transformed. */
+              /* TODO: We should compute a modelview containing only the "non-trivial"
+               *       part (e.g. the rotation) and use that. We want to keep the scale
+               *       for the texture.
+               */
+              gsk_gl_render_job_push_modelview (job, transform);
 
-                load_vertex_data_with_region (ops_draw (builder, NULL),
-                                              &child->bounds, builder,
-                                              &region,
-                                              is_offscreen);
-                ops_pop_modelview (builder);
-              }
-          }
-      }
-#endif
+              gsk_gl_program_begin_draw (job->driver->blit,
+                                         &job->viewport,
+                                         &job->projection,
+                                         gsk_gl_render_job_get_modelview_matrix (job),
+                                         gsk_gl_render_job_get_clip (job),
+                                         job->alpha);
+              gsk_gl_program_set_uniform_texture (job->driver->blit,
+                                                  UNIFORM_SHARED_SOURCE,
+                                                  GL_TEXTURE_2D,
+                                                  GL_TEXTURE0,
+                                                  offscreen.texture_id);
+              gsk_gl_render_job_load_vertices_from_offscreen (job, &child->bounds, &offscreen);
+              gsk_gl_program_end_draw (job->driver->blit);
 
+              gsk_gl_render_job_pop_modelview (job);
+            }
+        }
     break;
 
     default:
