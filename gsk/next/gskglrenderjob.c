@@ -36,10 +36,12 @@
 #include "gskgldriverprivate.h"
 #include "gskglprogramprivate.h"
 #include "gskglrenderjobprivate.h"
+#include "gskglshadowlibraryprivate.h"
 
 #define ORTHO_NEAR_PLANE   -10000
 #define ORTHO_FAR_PLANE     10000
 #define MAX_GRADIENT_STOPS  6
+#define SHADOW_EXTRA_SIZE   4
 #define X1(r) ((r)->origin.x)
 #define X2(r) ((r)->origin.x + (r)->size.width)
 #define Y1(r) ((r)->origin.y)
@@ -148,6 +150,15 @@ node_is_invisible (const GskRenderNode *node)
          node->bounds.size.height == 0.0f ||
          isnan (node->bounds.size.width) ||
          isnan (node->bounds.size.height);
+}
+
+static inline void
+gsk_rounded_rect_shrink_to_minimum (GskRoundedRect *self)
+{
+  self->bounds.size.width  = MAX (self->corner[0].width + self->corner[1].width,
+                                  self->corner[3].width + self->corner[2].width);
+  self->bounds.size.height = MAX (self->corner[0].height + self->corner[3].height,
+                                  self->corner[1].height + self->corner[2].height);
 }
 
 static inline gboolean G_GNUC_PURE
@@ -2026,7 +2037,316 @@ static void
 gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
                                                     GskRenderNode  *node)
 {
-  gsk_gl_render_job_visit_as_fallback (job, node);
+  const GskRoundedRect *outline = gsk_outset_shadow_node_get_outline (node);
+  const GdkRGBA *color = gsk_outset_shadow_node_get_color (node);
+  const float scale_x = job->scale_x;
+  const float scale_y = job->scale_y;
+  const float blur_radius = gsk_outset_shadow_node_get_blur_radius (node);
+  const float blur_extra = blur_radius * 2.0f; /* 2.0 = shader radius_multiplier */
+  const int extra_blur_pixels = (int) ceilf(blur_extra / 2.0 * MAX (scale_x, scale_y)); /* TODO: No need to MAX() here actually */
+  const float spread = gsk_outset_shadow_node_get_spread (node);
+  const float dx = gsk_outset_shadow_node_get_dx (node);
+  const float dy = gsk_outset_shadow_node_get_dy (node);
+  GskRoundedRect scaled_outline;
+  int texture_width, texture_height;
+  int blurred_texture_id;
+  int cached_tid;
+  gboolean do_slicing;
+
+  /* scaled_outline is the minimal outline we need to draw the given drop shadow,
+   * enlarged by the spread and offset by the blur radius. */
+  scaled_outline = *outline;
+
+  if (outline->bounds.size.width < blur_extra ||
+      outline->bounds.size.height < blur_extra)
+    {
+      do_slicing = false;
+      gsk_rounded_rect_shrink (&scaled_outline, -spread, -spread, -spread, -spread);
+    }
+  else
+    {
+      /* Shrink our outline to the minimum size that can still hold all the border radii */
+      gsk_rounded_rect_shrink_to_minimum (&scaled_outline);
+      /* Increase by the spread */
+      gsk_rounded_rect_shrink (&scaled_outline, -spread, -spread, -spread, -spread);
+      /* Grow bounds but don't grow corners */
+      graphene_rect_inset (&scaled_outline.bounds, - blur_extra / 2.0, - blur_extra / 2.0);
+      /* For the center part, we add a few pixels */
+      scaled_outline.bounds.size.width += SHADOW_EXTRA_SIZE;
+      scaled_outline.bounds.size.height += SHADOW_EXTRA_SIZE;
+
+      do_slicing = true;
+    }
+
+  texture_width  = (int)ceil ((scaled_outline.bounds.size.width  + blur_extra) * scale_x);
+  texture_height = (int)ceil ((scaled_outline.bounds.size.height + blur_extra) * scale_y);
+
+  scaled_outline.bounds.origin.x = extra_blur_pixels;
+  scaled_outline.bounds.origin.y = extra_blur_pixels;
+  scaled_outline.bounds.size.width = texture_width - (extra_blur_pixels * 2);
+  scaled_outline.bounds.size.height = texture_height - (extra_blur_pixels * 2);
+
+  for (guint i = 0; i < 4; i ++)
+    {
+      scaled_outline.corner[i].width *= scale_x;
+      scaled_outline.corner[i].height *= scale_y;
+    }
+
+#if 0
+  cached_tid = gsk_gl_shadow_library_get_texture_id (job->driver->shadows,
+                                                     &scaled_outline,
+                                                     blur_radius);
+
+
+  if (cached_tid == 0)
+    {
+      int texture_id, render_target;
+      int prev_render_target;
+      graphene_matrix_t prev_projection;
+      graphene_rect_t prev_viewport;
+      graphene_matrix_t item_proj;
+
+      gsk_gl_driver_create_render_target (self->gl_driver,
+                                          texture_width, texture_height,
+                                          GL_NEAREST, GL_NEAREST,
+                                          &texture_id, &render_target);
+      if (gdk_gl_context_has_debug (self->gl_context))
+        {
+          gdk_gl_context_label_object_printf (self->gl_context, GL_TEXTURE, texture_id,
+                                              "Outset Shadow Temp %d", texture_id);
+          gdk_gl_context_label_object_printf  (self->gl_context, GL_FRAMEBUFFER, render_target,
+                                               "Outset Shadow FB Temp %d", render_target);
+        }
+
+      ops_set_program (builder, &self->programs->color_program);
+      init_projection_matrix (&item_proj,
+                              &GRAPHENE_RECT_INIT (0, 0, texture_width, texture_height));
+
+      prev_render_target = ops_set_render_target (builder, render_target);
+      ops_begin (builder, OP_CLEAR);
+      prev_projection = ops_set_projection (builder, &item_proj);
+      ops_set_modelview (builder, NULL);
+      prev_viewport = ops_set_viewport (builder, &GRAPHENE_RECT_INIT (0, 0, texture_width, texture_height));
+
+      /* Draw outline */
+      ops_push_clip (builder, &scaled_outline);
+      ops_set_color (builder, &COLOR_WHITE);
+      load_float_vertex_data (ops_draw (builder, NULL), builder,
+                              0, 0, texture_width, texture_height);
+
+      ops_pop_clip (builder);
+      ops_set_viewport (builder, &prev_viewport);
+      ops_pop_modelview (builder);
+      ops_set_projection (builder, &prev_projection);
+      ops_set_render_target (builder, prev_render_target);
+
+      /* Now blur the outline */
+      blurred_texture_id = blur_texture (self, builder,
+                                         &(TextureRegion) { texture_id, 0, 0, 1, 1 },
+                                         texture_width,
+                                         texture_height,
+                                         blur_radius * scale_x,
+                                         blur_radius * scale_y);
+
+      gsk_gl_driver_mark_texture_permanent (self->gl_driver, blurred_texture_id);
+      gsk_gl_shadow_cache_commit (&self->shadow_cache,
+                                  &scaled_outline,
+                                  blur_radius,
+                                  blurred_texture_id);
+    }
+  else
+    {
+      blurred_texture_id = cached_tid;
+    }
+
+
+  if (!do_slicing)
+    {
+      const float min_x = floorf (outline->bounds.origin.x - spread - (blur_extra / 2.0) + dx);
+      const float min_y = floorf (outline->bounds.origin.y - spread - (blur_extra / 2.0) + dy);
+
+      ops_set_program (builder, &self->programs->outset_shadow_program);
+      ops_set_color (builder, color);
+      ops_set_texture (builder, blurred_texture_id);
+
+      shadow = ops_begin (builder, OP_CHANGE_OUTSET_SHADOW);
+      shadow->outline.value = transform_rect (self, builder, outline);
+      shadow->outline.send = TRUE;
+
+      load_vertex_data_with_region (ops_draw (builder, NULL),
+                                    &GRAPHENE_RECT_INIT (
+                                      min_x, min_y,
+                                      texture_width / scale_x, texture_height / scale_y
+                                    ), builder,
+                                    &(TextureRegion) { 0, 0, 0, 1, 1 },
+                                    FALSE);
+      return;
+    }
+
+
+  ops_set_program (builder, &self->programs->outset_shadow_program);
+  ops_set_color (builder, color);
+  ops_set_texture (builder, blurred_texture_id);
+
+  shadow = ops_begin (builder, OP_CHANGE_OUTSET_SHADOW);
+  shadow->outline.value = transform_rect (self, builder, outline);
+  shadow->outline.send = TRUE;
+
+  {
+    const float min_x = floorf (outline->bounds.origin.x - spread - (blur_extra / 2.0) + dx);
+    const float min_y = floorf (outline->bounds.origin.y - spread - (blur_extra / 2.0) + dy);
+    const float max_x = ceilf (outline->bounds.origin.x + outline->bounds.size.width +
+                               (blur_extra / 2.0) + dx + spread);
+    const float max_y = ceilf (outline->bounds.origin.y + outline->bounds.size.height +
+                               (blur_extra / 2.0) + dy + spread);
+    cairo_rectangle_int_t slices[9];
+    TextureRegion tregs[9];
+
+    /* TODO: The slicing never changes and could just go into the cache */
+    nine_slice_rounded_rect (&scaled_outline, slices);
+    nine_slice_grow (slices, extra_blur_pixels);
+    nine_slice_to_texture_coords (slices, texture_width, texture_height, tregs);
+
+    /* Our texture coordinates MUST be scaled, while the actual vertex coords
+     * MUST NOT be scaled. */
+
+    /* Top left */
+    if (slice_is_visible (&slices[NINE_SLICE_TOP_LEFT]))
+      {
+        load_vertex_data_with_region (ops_draw (builder, NULL),
+                                      &GRAPHENE_RECT_INIT (
+                                        min_x, min_y,
+                                        slices[NINE_SLICE_TOP_LEFT].width / scale_x,
+                                        slices[NINE_SLICE_TOP_LEFT].height / scale_y
+                                      ),
+                                      builder,
+                                      &tregs[NINE_SLICE_TOP_LEFT], TRUE);
+      }
+
+    /* Top center */
+    if (slice_is_visible (&slices[NINE_SLICE_TOP_CENTER]))
+      {
+        const float width = (max_x - min_x) - (slices[NINE_SLICE_TOP_LEFT].width / scale_x +
+                                               slices[NINE_SLICE_TOP_RIGHT].width / scale_x);
+        load_vertex_data_with_region (ops_draw (builder, NULL),
+                                      &GRAPHENE_RECT_INIT (
+                                        min_x + (slices[NINE_SLICE_TOP_LEFT].width / scale_x),
+                                        min_y,
+                                        width,
+                                        slices[NINE_SLICE_TOP_CENTER].height / scale_y
+                                      ),
+                                      builder,
+                                      &tregs[NINE_SLICE_TOP_CENTER], TRUE);
+      }
+    /* Top right */
+    if (slice_is_visible (&slices[NINE_SLICE_TOP_RIGHT]))
+      {
+        load_vertex_data_with_region (ops_draw (builder, NULL),
+                                      &GRAPHENE_RECT_INIT (
+                                        max_x - (slices[NINE_SLICE_TOP_RIGHT].width / scale_x),
+                                        min_y,
+                                        slices[NINE_SLICE_TOP_RIGHT].width / scale_x,
+                                        slices[NINE_SLICE_TOP_RIGHT].height / scale_y
+                                      ),
+                                      builder,
+                                      &tregs[NINE_SLICE_TOP_RIGHT], TRUE);
+      }
+
+    /* Bottom right */
+    if (slice_is_visible (&slices[NINE_SLICE_BOTTOM_RIGHT]))
+      {
+        load_vertex_data_with_region (ops_draw (builder, NULL),
+                                      &GRAPHENE_RECT_INIT (
+                                        max_x - (slices[NINE_SLICE_BOTTOM_RIGHT].width / scale_x),
+                                        max_y - (slices[NINE_SLICE_BOTTOM_RIGHT].height / scale_y),
+                                        slices[NINE_SLICE_BOTTOM_RIGHT].width / scale_x,
+                                        slices[NINE_SLICE_BOTTOM_RIGHT].height / scale_y
+                                      ),
+                                      builder,
+                                      &tregs[NINE_SLICE_BOTTOM_RIGHT], TRUE);
+      }
+
+    /* Bottom left */
+    if (slice_is_visible (&slices[NINE_SLICE_BOTTOM_LEFT]))
+      {
+        load_vertex_data_with_region (ops_draw (builder, NULL),
+                                      &GRAPHENE_RECT_INIT (
+                                        min_x,
+                                        max_y - (slices[NINE_SLICE_BOTTOM_LEFT].height / scale_y),
+                                        slices[NINE_SLICE_BOTTOM_LEFT].width / scale_x,
+                                        slices[NINE_SLICE_BOTTOM_LEFT].height / scale_y
+                                      ),
+                                      builder,
+                                      &tregs[NINE_SLICE_BOTTOM_LEFT], TRUE);
+      }
+
+    /* Left side */
+    if (slice_is_visible (&slices[NINE_SLICE_LEFT_CENTER]))
+      {
+        const float height = (max_y - min_y) - (slices[NINE_SLICE_TOP_LEFT].height / scale_y +
+                                                slices[NINE_SLICE_BOTTOM_LEFT].height / scale_y);
+        load_vertex_data_with_region (ops_draw (builder, NULL),
+                                      &GRAPHENE_RECT_INIT (
+                                        min_x,
+                                        min_y + (slices[NINE_SLICE_TOP_LEFT].height / scale_y),
+                                        slices[NINE_SLICE_LEFT_CENTER].width / scale_x,
+                                        height
+                                      ),
+                                      builder,
+                                      &tregs[NINE_SLICE_LEFT_CENTER], TRUE);
+      }
+
+    /* Right side */
+    if (slice_is_visible (&slices[NINE_SLICE_RIGHT_CENTER]))
+      {
+        const float height = (max_y - min_y) - (slices[NINE_SLICE_TOP_RIGHT].height / scale_y +
+                                                slices[NINE_SLICE_BOTTOM_RIGHT].height / scale_y);
+        load_vertex_data_with_region (ops_draw (builder, NULL),
+                                      &GRAPHENE_RECT_INIT (
+                                        max_x - (slices[NINE_SLICE_RIGHT_CENTER].width / scale_x),
+                                        min_y + (slices[NINE_SLICE_TOP_LEFT].height / scale_y),
+                                        slices[NINE_SLICE_RIGHT_CENTER].width / scale_x,
+                                        height
+                                      ),
+                                      builder,
+                                      &tregs[NINE_SLICE_RIGHT_CENTER], TRUE);
+      }
+
+    /* Bottom side */
+    if (slice_is_visible (&slices[NINE_SLICE_BOTTOM_CENTER]))
+      {
+        const float width = (max_x - min_x) - (slices[NINE_SLICE_BOTTOM_LEFT].width / scale_x +
+                                               slices[NINE_SLICE_BOTTOM_RIGHT].width / scale_x);
+        load_vertex_data_with_region (ops_draw (builder, NULL),
+                                      &GRAPHENE_RECT_INIT (
+                                        min_x + (slices[NINE_SLICE_BOTTOM_LEFT].width / scale_x),
+                                        max_y - (slices[NINE_SLICE_BOTTOM_CENTER].height / scale_y),
+                                        width,
+                                        slices[NINE_SLICE_BOTTOM_CENTER].height / scale_y
+                                      ),
+                                      builder,
+                                      &tregs[NINE_SLICE_BOTTOM_CENTER], TRUE);
+      }
+
+    /* Middle */
+    if (slice_is_visible (&slices[NINE_SLICE_CENTER]))
+      {
+        const float width = (max_x - min_x) - (slices[NINE_SLICE_LEFT_CENTER].width / scale_x +
+                                               slices[NINE_SLICE_RIGHT_CENTER].width / scale_x);
+        const float height = (max_y - min_y) - (slices[NINE_SLICE_TOP_CENTER].height / scale_y +
+                                                slices[NINE_SLICE_BOTTOM_CENTER].height / scale_y);
+
+        load_vertex_data_with_region (ops_draw (builder, NULL),
+                                      &GRAPHENE_RECT_INIT (
+                                        min_x + (slices[NINE_SLICE_LEFT_CENTER].width / scale_x),
+                                        min_y + (slices[NINE_SLICE_TOP_CENTER].height / scale_y),
+                                        width, height
+                                      ),
+                                      builder,
+                                      &tregs[NINE_SLICE_CENTER], TRUE);
+      }
+  }
+#endif
 }
 
 static inline bool G_GNUC_PURE
