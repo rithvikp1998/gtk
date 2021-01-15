@@ -2165,7 +2165,100 @@ static void
 gsk_gl_render_job_visit_shadow_node (GskGLRenderJob *job,
                                      GskRenderNode  *node)
 {
-  gsk_gl_render_job_visit_as_fallback (job, node);
+  const gsize n_shadows = gsk_shadow_node_get_n_shadows (node);
+  GskRenderNode *original_child = gsk_shadow_node_get_child (node);
+  GskRenderNode *shadow_child = original_child;
+
+  /* Shadow nodes recolor every pixel of the source texture, but leave the alpha in tact.
+   * If the child is a color matrix node that doesn't touch the alpha, we can throw that away. */
+  if (gsk_render_node_get_node_type (shadow_child) == GSK_COLOR_MATRIX_NODE &&
+      !color_matrix_modifies_alpha (shadow_child))
+    shadow_child = gsk_color_matrix_node_get_child (shadow_child);
+
+  for (guint i = 0; i < n_shadows; i ++)
+    {
+      const GskShadow *shadow = gsk_shadow_node_get_shadow (node, i);
+      const float dx = shadow->dx;
+      const float dy = shadow->dy;
+      GskGLRenderOffscreen offscreen = {0};
+      graphene_rect_t bounds;
+
+      if (shadow->radius == 0 &&
+          gsk_render_node_get_node_type (shadow_child) == GSK_TEXT_NODE)
+        {
+          gsk_gl_render_job_offset (job, dx, dy);
+          gsk_gl_render_job_visit_text_node (job, shadow_child, &shadow->color, TRUE);
+          gsk_gl_render_job_offset (job, -dx, -dy);
+          continue;
+        }
+
+      if (gdk_rgba_is_clear (&shadow->color))
+        continue;
+
+      if (node_is_invisible (shadow_child))
+        continue;
+
+      if (shadow->radius > 0)
+        {
+          float min_x;
+          float min_y;
+          float max_x;
+          float max_y;
+
+          offscreen.do_not_cache = TRUE;
+
+          blur_node (job,
+                     &offscreen,
+                     shadow_child,
+                     shadow->radius,
+                     &min_x, &max_x,
+                     &min_y, &max_y);
+
+          bounds.origin.x = min_x - job->offset_x;
+          bounds.origin.y = min_y - job->offset_y;
+          bounds.size.width = max_x - min_x;
+          bounds.size.height = max_y - min_y;
+
+          offscreen.was_offscreen = TRUE;
+        }
+      else if (dx == 0 && dy == 0)
+        {
+          continue; /* Invisible anyway */
+        }
+      else
+        {
+          offscreen.bounds = &shadow_child->bounds;
+          offscreen.reset_clip = TRUE;
+          offscreen.do_not_cache = TRUE;
+
+          if (!gsk_gl_render_job_visit_node_with_offscreen (job, shadow_child, &offscreen))
+            g_assert_not_reached ();
+
+          bounds = shadow_child->bounds;
+        }
+
+      gsk_gl_render_job_offset (job, dx, dy);
+      gsk_gl_program_begin_draw (job->driver->coloring,
+                                 &job->viewport,
+                                 &job->projection,
+                                 gsk_gl_render_job_get_modelview_matrix (job),
+                                 gsk_gl_render_job_get_clip (job),
+                                 job->alpha);
+      gsk_gl_program_set_uniform_texture (job->driver->coloring,
+                                          UNIFORM_SHARED_SOURCE,
+                                          GL_TEXTURE_2D,
+                                          GL_TEXTURE0,
+                                          offscreen.texture_id);
+      gsk_gl_program_set_uniform_color (job->driver->coloring,
+                                        UNIFORM_COLORING_COLOR,
+                                        &shadow->color);
+      gsk_gl_render_job_load_vertices_from_offscreen (job, &bounds, &offscreen);
+      gsk_gl_program_end_draw (job->driver->coloring);
+      gsk_gl_render_job_offset (job, -dx, -dy);
+    }
+
+  /* Now draw the child normally */
+  gsk_gl_render_job_visit_node (job, original_child);
 }
 
 static void
