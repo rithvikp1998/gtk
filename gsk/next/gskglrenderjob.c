@@ -1839,10 +1839,10 @@ gsk_gl_render_job_visit_blurred_inset_shadow_node (GskGLRenderJob *job,
           outline_to_blur.corner[i].height *= scale_y;
         }
 
-      if (gsk_next_driver_create_render_target (job->driver,
-                                                texture_width, texture_height,
-                                                GL_NEAREST, GL_NEAREST,
-                                                &render_target))
+      if (!gsk_next_driver_create_render_target (job->driver,
+                                                 texture_width, texture_height,
+                                                 GL_NEAREST, GL_NEAREST,
+                                                 &render_target))
         g_assert_not_reached ();
 
       gsk_gl_render_state_save (&state, job);
