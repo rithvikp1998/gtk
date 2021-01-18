@@ -42,11 +42,92 @@ G_STATIC_ASSERT (sizeof (GskGLGlyphKey) == 16);
 G_STATIC_ASSERT (sizeof (GskGLGlyphKey) == 12);
 #endif
 
+typedef struct _GskGLGlyphValue
+{
+  GskGLTextureAtlas *atlas;
+  guint texture_id;
+
+  float tx;
+  float ty;
+  float tw;
+  float th;
+
+  int draw_x;
+  int draw_y;
+  int draw_width;
+  int draw_height;
+
+  guint accessed : 1; /* accessed since last check */
+  guint used     : 1; /* accounted as used in the atlas */
+} GskGLGlyphValue;
+
 #define GSK_TYPE_GL_GLYPH_LIBRARY (gsk_gl_glyph_library_get_type())
 
 G_DECLARE_FINAL_TYPE (GskGLGlyphLibrary, gsk_gl_glyph_library, GSK, GL_GLYPH_LIBRARY, GskGLTextureLibrary)
 
-GskGLGlyphLibrary *gsk_gl_glyph_library_new (GdkGLContext *context);
+struct _GskGLGlyphLibrary
+{
+  GskGLTextureLibrary parent_instance;
+  GHashTable *hash_table;
+};
+
+GskGLGlyphLibrary *gsk_gl_glyph_library_new (GdkGLContext           *context);
+gboolean           gsk_gl_glyph_library_add (GskGLGlyphLibrary      *self,
+                                             const GskGLGlyphKey    *key,
+                                             const GskGLGlyphValue **out_value);
+
+static inline int
+gsk_gl_glyph_key_phase (float value)
+{
+  return floor (4 * (value + 0.125)) - 4 * floor (value + 0.125);
+}
+
+static inline void
+gsk_gl_glyph_key_set_glyph_and_shift (GskGLGlyphKey *key,
+                                      PangoGlyph     glyph,
+                                      float          x,
+                                      float          y)
+{
+  key->glyph = glyph;
+  key->xshift = gsk_gl_glyph_key_phase (x);
+  key->yshift = gsk_gl_glyph_key_phase (y);
+}
+
+static inline gboolean
+gsk_gl_glyph_library_lookup_or_add (GskGLGlyphLibrary      *self,
+                                    const GskGLGlyphKey    *key,
+                                    const GskGLGlyphValue **out_value)
+{
+  GskGLGlyphValue *value = g_hash_table_lookup (self->hash_table, key);
+
+  /* Optimize for the fast path (repeated lookups of a character */
+  if G_LIKELY (value && value->accessed && value->used)
+    {
+      *out_value = value;
+      return value->texture_id > 0;
+    }
+
+  /* We found it, but haven't marked as used for this frame */
+  if (value != NULL)
+    {
+      value->accessed = TRUE;
+
+      if (!value->used)
+        {
+          gsk_gl_texture_library_mark_used (self,
+                                            value->atlas,
+                                            value->draw_width,
+                                            value->draw_height);
+          value->used = TRUE;
+        }
+
+      *out_value = value;
+
+      return value->texture_id > 0;
+    }
+
+  return gsk_gl_glyph_library_add (self, key, out_value);
+}
 
 G_END_DECLS
 

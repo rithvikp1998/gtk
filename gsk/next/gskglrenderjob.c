@@ -34,6 +34,7 @@
 
 #include "gskglcommandqueueprivate.h"
 #include "gskgldriverprivate.h"
+#include "gskglglyphlibraryprivate.h"
 #include "gskglprogramprivate.h"
 #include "gskglrenderjobprivate.h"
 #include "gskglshadowlibraryprivate.h"
@@ -2478,7 +2479,122 @@ gsk_gl_render_job_visit_text_node (GskGLRenderJob *job,
                                    const GdkRGBA  *color,
                                    gboolean        force_color)
 {
-  gsk_gl_render_job_visit_as_fallback (job, node);
+  const PangoFont *font = gsk_text_node_get_font (node);
+  const PangoGlyphInfo *glyphs = gsk_text_node_get_glyphs (node, NULL);
+  const graphene_point_t *offset = gsk_text_node_get_offset (node);
+  float text_scale = MAX (job->scale_x, job->scale_y); /* TODO: Fix for uneven scales? */
+  guint num_glyphs = gsk_text_node_get_num_glyphs (node);
+  float x = offset->x + job->offset_x;
+  float y = offset->y + job->offset_y;
+  GskGLGlyphLibrary *library = job->driver->glyphs;
+  GskGLProgram *program;
+  int x_position = 0;
+  GskGLGlyphKey lookup;
+  guint last_texture = 0;
+
+  /* If the font has color glyphs, we don't need to recolor anything */
+  if (!force_color && gsk_text_node_has_color_glyphs (node))
+    {
+      program = job->driver->blit;
+    }
+  else
+    {
+      program = job->driver->coloring;
+      gsk_gl_program_set_uniform_color (program, UNIFORM_COLORING_COLOR, color);
+    }
+
+  memset (&lookup, 0, sizeof lookup);
+  lookup.font = (PangoFont *)font;
+  lookup.scale = (guint) (text_scale * 1024);
+
+  gsk_gl_program_begin_draw (program,
+                             &job->viewport,
+                             &job->projection,
+                             gsk_gl_render_job_get_modelview_matrix (job),
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
+
+  /* We use one quad per character */
+  for (guint i = 0; i < num_glyphs; i++)
+    {
+      GskGLDrawVertex *vertices;
+      const PangoGlyphInfo *gi = &glyphs[i];
+      const GskGLGlyphValue *glyph;
+      float glyph_x, glyph_y, glyph_x2, glyph_y2;
+      float tx, ty, tx2, ty2;
+      float cx;
+      float cy;
+
+      if (gi->glyph == PANGO_GLYPH_EMPTY)
+        continue;
+
+      cx = (float)(x_position + gi->geometry.x_offset) / PANGO_SCALE;
+      cy = (float)(gi->geometry.y_offset) / PANGO_SCALE;
+
+      gsk_gl_glyph_key_set_glyph_and_shift (&lookup, gi->glyph, x + cx, y + cy);
+
+      if (!gsk_gl_glyph_library_lookup_or_add (library, &lookup, &glyph))
+        goto next;
+
+      g_assert (glyph->texture_id != 0);
+
+      if (last_texture != glyph->texture_id)
+        {
+          gsk_gl_program_set_uniform_texture (program,
+                                              UNIFORM_SHARED_SOURCE,
+                                              GL_TEXTURE_2D,
+                                              GL_TEXTURE0,
+                                              glyph->texture_id);
+          last_texture = glyph->texture_id;
+        }
+
+      tx  = glyph->tx;
+      ty  = glyph->ty;
+      tx2 = tx + glyph->tw;
+      ty2 = ty + glyph->th;
+
+      glyph_x = floor (x + cx + 0.125) + glyph->draw_x;
+      glyph_y = floor (y + cy + 0.125) + glyph->draw_y;
+      glyph_x2 = glyph_x + glyph->draw_width;
+      glyph_y2 = glyph_y + glyph->draw_height;
+
+      vertices = gsk_gl_command_queue_add_vertices (job->command_queue, NULL);
+
+      vertices[0].position[0] = glyph_x;
+      vertices[0].position[1] = glyph_y;
+      vertices[0].uv[0] = tx;
+      vertices[0].uv[1] = ty;
+
+      vertices[1].position[0] = glyph_x;
+      vertices[1].position[1] = glyph_y2;
+      vertices[1].uv[0] = tx;
+      vertices[1].uv[1] = ty2;
+
+      vertices[2].position[0] = glyph_x2;
+      vertices[2].position[1] = glyph_y;
+      vertices[2].uv[0] = tx2;
+      vertices[2].uv[1] = ty;
+
+      vertices[3].position[0] = glyph_x2;
+      vertices[3].position[1] = glyph_y2;
+      vertices[3].uv[0] = tx2;
+      vertices[3].uv[1] = ty2;
+
+      vertices[4].position[0] = glyph_x;
+      vertices[4].position[1] = glyph_y2;
+      vertices[4].uv[0] = tx;
+      vertices[4].uv[1] = ty2;
+
+      vertices[4].position[0] = glyph_x2;
+      vertices[4].position[1] = glyph_y;
+      vertices[4].uv[0] = tx2;
+      vertices[4].uv[1] = ty;
+
+next:
+      x_position += gi->geometry.width;
+    }
+
+  gsk_gl_program_end_draw (program);
 }
 
 static void
