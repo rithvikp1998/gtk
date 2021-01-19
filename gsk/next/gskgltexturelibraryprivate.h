@@ -113,8 +113,7 @@ void     gsk_gl_texture_library_set_funcs   (GskGLTextureLibrary    *self,
 void     gsk_gl_texture_library_begin_frame (GskGLTextureLibrary    *self);
 void     gsk_gl_texture_library_end_frame   (GskGLTextureLibrary    *self);
 gpointer gsk_gl_texture_library_pack        (GskGLTextureLibrary    *self,
-                                             gconstpointer           key,
-                                             gsize                   keylen,
+                                             gpointer                key,
                                              gsize                   valuelen,
                                              guint                   width,
                                              guint                   height);
@@ -172,7 +171,8 @@ GSK_GL_TEXTURE_ATLAS_ENTRY_TEXTURE (gconstpointer d)
 {
   const GskGLTextureAtlasEntry *e = d;
 
-  return e->is_atlased ? e->atlas->texture_id : e->texture->texture_id;
+  return e->is_atlased ? e->atlas->texture_id
+                       : e->texture ? e->texture->texture_id : 0;
 }
 
 static inline double

@@ -54,13 +54,15 @@ G_DECLARE_FINAL_TYPE (GskGLGlyphLibrary, gsk_gl_glyph_library, GSK, GL_GLYPH_LIB
 
 struct _GskGLGlyphLibrary
 {
-  GskGLTextureLibrary parent_instance;
-  GHashTable *hash_table;
+  GskGLTextureLibrary  parent_instance;
+  GHashTable          *hash_table;
+  guint8              *surface_data;
+  gsize                surface_data_len;
 };
 
 GskGLGlyphLibrary *gsk_gl_glyph_library_new (GskNextDriver          *driver);
 gboolean           gsk_gl_glyph_library_add (GskGLGlyphLibrary      *self,
-                                             const GskGLGlyphKey    *key,
+                                             GskGLGlyphKey          *key,
                                              const GskGLGlyphValue **out_value);
 
 static inline int
@@ -86,6 +88,7 @@ gsk_gl_glyph_library_lookup_or_add (GskGLGlyphLibrary      *self,
                                     const GskGLGlyphValue **out_value)
 {
   GskGLTextureAtlasEntry *entry;
+  GskGLGlyphKey *k;
 
   if G_LIKELY (gsk_gl_texture_library_lookup ((GskGLTextureLibrary *)self, key, &entry))
     {
@@ -93,7 +96,10 @@ gsk_gl_glyph_library_lookup_or_add (GskGLGlyphLibrary      *self,
       return TRUE;
     }
 
-  return gsk_gl_glyph_library_add (self, key, out_value);
+  k = g_slice_copy (sizeof *key, key);
+  g_object_ref (k->font);
+
+  return gsk_gl_glyph_library_add (self, k, out_value);
 }
 
 G_END_DECLS

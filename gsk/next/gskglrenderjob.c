@@ -2538,13 +2538,20 @@ gsk_gl_render_job_visit_text_node (GskGLRenderJob *job,
 
       texture_id = GSK_GL_TEXTURE_ATLAS_ENTRY_TEXTURE (glyph);
 
-      if (last_texture != texture_id)
+      if G_UNLIKELY (last_texture != texture_id)
         {
+          gsk_gl_program_end_draw (program);
           gsk_gl_program_set_uniform_texture (program,
                                               UNIFORM_SHARED_SOURCE,
                                               GL_TEXTURE_2D,
                                               GL_TEXTURE0,
                                               texture_id);
+          gsk_gl_program_begin_draw (program,
+                                     &job->viewport,
+                                     &job->projection,
+                                     gsk_gl_render_job_get_modelview_matrix (job),
+                                     gsk_gl_render_job_get_clip (job),
+                                     job->alpha);
           last_texture = texture_id;
         }
 

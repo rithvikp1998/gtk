@@ -48,4 +48,6 @@ gsk_gl_shadow_library_class_init (GskGLShadowLibraryClass *klass)
 static void
 gsk_gl_shadow_library_init (GskGLShadowLibrary *self)
 {
+  gsk_gl_texture_library_set_funcs (GSK_GL_TEXTURE_LIBRARY (self),
+                                    NULL, NULL, NULL, NULL);
 }

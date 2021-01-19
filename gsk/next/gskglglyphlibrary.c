@@ -20,6 +20,9 @@
 
 #include "config.h"
 
+#include <gdk/gdkglcontextprivate.h>
+#include <gdk/gdkmemorytextureprivate.h>
+
 #include "gskgldriverprivate.h"
 #include "gskglglyphlibraryprivate.h"
 
@@ -66,7 +69,10 @@ gsk_gl_glyph_key_equal (gconstpointer v1,
 static void
 gsk_gl_glyph_key_free (gpointer data)
 {
-  g_slice_free (GskGLGlyphKey, data);
+  GskGLGlyphKey *key = data;
+
+  g_clear_object (&key->font);
+  g_slice_free (GskGLGlyphKey, key);
 }
 
 static void
@@ -81,6 +87,7 @@ gsk_gl_glyph_library_finalize (GObject *object)
   GskGLGlyphLibrary *self = (GskGLGlyphLibrary *)object;
 
   g_clear_pointer (&self->hash_table, g_hash_table_unref);
+  g_clear_pointer (&self->surface_data, g_free);
 
   G_OBJECT_CLASS (gsk_gl_glyph_library_parent_class)->finalize (object);
 }
@@ -104,9 +111,160 @@ gsk_gl_glyph_library_init (GskGLGlyphLibrary *self)
                                     gsk_gl_glyph_value_free);
 }
 
+static cairo_surface_t *
+gsk_gl_glyph_library_create_surface (GskGLGlyphLibrary *self,
+                                     int                stride,
+                                     int                width,
+                                     int                height,
+                                     double             device_scale)
+{
+  cairo_surface_t *surface;
+  gsize n_bytes;
+
+  g_assert (GSK_IS_GL_GLYPH_LIBRARY (self));
+  g_assert (width > 0);
+  g_assert (height > 0);
+
+  n_bytes = stride * height;
+
+  if G_LIKELY (n_bytes > self->surface_data_len)
+    {
+      self->surface_data = g_realloc (self->surface_data, n_bytes);
+      self->surface_data_len = n_bytes;
+    }
+
+  memset (self->surface_data, 0, n_bytes);
+  surface = cairo_image_surface_create_for_data (self->surface_data,
+                                                 CAIRO_FORMAT_ARGB32,
+                                                 width, height, stride);
+  cairo_surface_set_device_scale (surface, device_scale, device_scale);
+
+  return surface;
+}
+
+static void
+render_glyph (cairo_surface_t           *surface,
+              const cairo_scaled_font_t *scaled_font,
+              const GskGLGlyphKey       *key,
+              const GskGLGlyphValue     *value)
+{
+  cairo_t *cr;
+  PangoGlyphString glyph_string;
+  PangoGlyphInfo glyph_info;
+
+  g_assert (surface != NULL);
+  g_assert (scaled_font != NULL);
+
+  cr = cairo_create (surface);
+  cairo_set_scaled_font (cr, scaled_font);
+  cairo_set_source_rgba (cr, 1, 1, 1, 1);
+
+  glyph_info.glyph = key->glyph;
+  glyph_info.geometry.width = value->ink_rect.width * 1024;
+  if (glyph_info.glyph & PANGO_GLYPH_UNKNOWN_FLAG)
+    glyph_info.geometry.x_offset = 0;
+  else
+    glyph_info.geometry.x_offset = - value->ink_rect.x * 1024;
+  glyph_info.geometry.y_offset = - value->ink_rect.y * 1024;
+
+  glyph_string.num_glyphs = 1;
+  glyph_string.glyphs = &glyph_info;
+
+  pango_cairo_show_glyph_string (cr, key->font, &glyph_string);
+  cairo_destroy (cr);
+
+  cairo_surface_flush (surface);
+}
+
+static void
+gsk_gl_glyph_library_upload_glyph (GskGLGlyphLibrary     *self,
+                                   const GskGLGlyphKey   *key,
+                                   const GskGLGlyphValue *value,
+                                   int                    width,
+                                   int                    height,
+                                   double                 device_scale)
+{
+  cairo_scaled_font_t *scaled_font;
+  GskGLTextureAtlas *atlas;
+  cairo_surface_t *surface;
+  guchar *pixel_data;
+  guchar *free_data = NULL;
+  guint gl_format;
+  guint gl_type;
+  guint texture_id;
+  gsize stride;
+  int x, y;
+
+  g_assert (GSK_IS_GL_GLYPH_LIBRARY (self));
+  g_assert (key != NULL);
+  g_assert (value != NULL);
+
+  scaled_font = pango_cairo_font_get_scaled_font ((PangoCairoFont *)key->font);
+  if G_UNLIKELY (scaled_font == NULL ||
+                 cairo_scaled_font_status (scaled_font) != CAIRO_STATUS_SUCCESS)
+    return;
+
+  stride = cairo_format_stride_for_width (CAIRO_FORMAT_ARGB32, width);
+  atlas = value->entry.is_atlased ? value->entry.atlas : NULL;
+
+  gdk_gl_context_push_debug_group_printf (gdk_gl_context_get_current (),
+                                          "Uploading glyph %d",
+                                          key->glyph);
+
+  surface = gsk_gl_glyph_library_create_surface (self, stride, width, height, device_scale);
+  render_glyph (surface, scaled_font, key, value);
+
+  texture_id = GSK_GL_TEXTURE_ATLAS_ENTRY_TEXTURE (value);
+
+  g_assert (texture_id > 0);
+
+  glPixelStorei (GL_UNPACK_ROW_LENGTH, stride / 4);
+  glBindTexture (GL_TEXTURE_2D, texture_id);
+
+  if G_UNLIKELY (gdk_gl_context_get_use_es (gdk_gl_context_get_current ()))
+    {
+      pixel_data = free_data = g_malloc (width * height * 4);
+      gdk_memory_convert (pixel_data,
+                          width * 4,
+                          GDK_MEMORY_R8G8B8A8_PREMULTIPLIED,
+                          cairo_image_surface_get_data (surface),
+                          width * 4,
+                          GDK_MEMORY_DEFAULT,
+                          width, height);
+      gl_format = GL_RGBA;
+      gl_type = GL_UNSIGNED_BYTE;
+    }
+  else
+    {
+      pixel_data = cairo_image_surface_get_data (surface);
+      gl_format = GL_BGRA;
+      gl_type = GL_UNSIGNED_INT_8_8_8_8_REV;
+    }
+
+  if G_LIKELY (atlas != NULL)
+    {
+      x = atlas->width * value->entry.area.origin.x;
+      y = atlas->width * value->entry.area.origin.y;
+    }
+  else
+    {
+      x = 0;
+      y = 0;
+    }
+
+  glTexSubImage2D (GL_TEXTURE_2D, 0, x, y, width, height,
+                   gl_format, gl_type, pixel_data);
+  glPixelStorei (GL_UNPACK_ROW_LENGTH, 0);
+
+  cairo_surface_destroy (surface);
+  g_free (free_data);
+
+  gdk_gl_context_pop_debug_group (gdk_gl_context_get_current ());
+}
+
 gboolean
 gsk_gl_glyph_library_add (GskGLGlyphLibrary      *self,
-                          const GskGLGlyphKey    *key,
+                          GskGLGlyphKey          *key,
                           const GskGLGlyphValue **out_value)
 {
   PangoRectangle ink_rect;
@@ -131,14 +289,21 @@ gsk_gl_glyph_library_add (GskGLGlyphLibrary      *self,
 
   value = gsk_gl_texture_library_pack (GSK_GL_TEXTURE_LIBRARY (self),
                                        key,
-                                       sizeof *key,
                                        sizeof *value,
                                        width,
                                        height);
 
   memcpy (&value->ink_rect, &ink_rect, sizeof ink_rect);
 
+  if (key->scale > 0 && width > 0 && height > 0)
+    gsk_gl_glyph_library_upload_glyph (self,
+                                       key,
+                                       value,
+                                       width,
+                                       height,
+                                       key->scale / 1024.0);
 
+  *out_value = value;
 
   return TRUE;
 }

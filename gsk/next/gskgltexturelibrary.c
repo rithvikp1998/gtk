@@ -232,8 +232,7 @@ gsk_gl_texture_atlases_pack (GskNextDriver      *driver,
 
 gpointer
 gsk_gl_texture_library_pack (GskGLTextureLibrary *self,
-                             gconstpointer        key,
-                             gsize                keylen,
+                             gpointer             key,
                              gsize                valuelen,
                              guint                width,
                              guint                height)
@@ -243,14 +242,26 @@ gsk_gl_texture_library_pack (GskGLTextureLibrary *self,
 
   g_assert (GSK_IS_GL_TEXTURE_LIBRARY (self));
   g_assert (key != NULL);
-  g_assert (keylen > 0);
   g_assert (valuelen > sizeof (GskGLTextureAtlasEntry));
 
   entry = g_slice_alloc0 (valuelen);
   entry->n_pixels = width * height;
   entry->accessed = TRUE;
 
-  if (width <= self->max_entry_size && height <= self->max_entry_size)
+  /* If our size is invisible then we just want an entry in the
+   * cache for faster lookups, but do not actually spend any texture
+   * allocations on this entry.
+   */
+  if (width <= 0 && height <= 0)
+    {
+      entry->is_atlased = FALSE;
+      entry->texture = NULL;
+      entry->area.origin.x = 0.0f;
+      entry->area.origin.y = 0.0f;
+      entry->area.size.width = 0.0f;
+      entry->area.size.height = 0.0f;
+    }
+  else if (width <= self->max_entry_size && height <= self->max_entry_size)
     {
       int packed_x;
       int packed_y;
@@ -281,9 +292,7 @@ gsk_gl_texture_library_pack (GskGLTextureLibrary *self,
       entry->area.size.height = 1.0f;
     }
 
-  g_hash_table_insert (self->hash_table,
-                       g_slice_copy (keylen, key),
-                       entry);
+  g_hash_table_insert (self->hash_table, key, entry);
 
   return entry;
 }
