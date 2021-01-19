@@ -40,6 +40,7 @@
 #include "gskgltexturepoolprivate.h"
 
 #define TEXTURES_CACHED_FOR_N_FRAMES 1
+#define ATLAS_SIZE 512
 
 G_DEFINE_TYPE (GskNextDriver, gsk_next_driver, G_TYPE_OBJECT)
 
@@ -133,6 +134,49 @@ gsk_next_driver_collect_unused_textures (GskNextDriver *self,
 }
 
 static void
+gsk_gl_texture_atlas_free (GskGLTextureAtlas *atlas)
+{
+  if (atlas->texture_id != 0)
+    {
+      glDeleteTextures (1, &atlas->texture_id);
+      atlas->texture_id = 0;
+    }
+
+  g_clear_pointer (&atlas->nodes, g_free);
+  g_slice_free (GskGLTextureAtlas, atlas);
+}
+
+GskGLTextureAtlas *
+gsk_next_driver_create_atlas (GskNextDriver *self)
+{
+  GskGLTextureAtlas *atlas;
+
+  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), NULL);
+
+  atlas = g_slice_new0 (GskGLTextureAtlas);
+  atlas->width = ATLAS_SIZE;
+  atlas->height = ATLAS_SIZE;
+  /* TODO: We might want to change the strategy about the amount of
+   *       nodes here? stb_rect_pack.h says width is optimal. */
+  atlas->nodes = g_malloc0_n (atlas->width, sizeof (struct stbrp_node));
+  stbrp_init_target (&atlas->context, atlas->width, atlas->height, atlas->nodes, atlas->width);
+  atlas->texture_id = gsk_gl_command_queue_create_texture (self->command_queue,
+                                                           atlas->width,
+                                                           atlas->height,
+                                                           GL_LINEAR,
+                                                           GL_LINEAR);
+
+  gdk_gl_context_label_object_printf (gdk_gl_context_get_current (),
+                                      GL_TEXTURE, atlas->texture_id,
+                                      "Texture atlas %d",
+                                      atlas->texture_id);
+
+  g_ptr_array_add (self->atlases, atlas);
+
+  return atlas;
+}
+
+static void
 gsk_next_driver_shader_weak_cb (gpointer  data,
                                 GObject  *where_object_was)
 {
@@ -197,6 +241,11 @@ gsk_next_driver_dispose (GObject *object)
       self->autorelease_framebuffers->len = 0;
     }
 
+  g_clear_object (&self->glyphs);
+  g_clear_object (&self->icons);
+  g_clear_object (&self->shadows);
+
+  g_clear_pointer (&self->atlases, g_ptr_array_unref);
   g_clear_pointer (&self->autorelease_framebuffers, g_array_unref);
   g_clear_pointer (&self->key_to_texture_id, g_hash_table_unref);
   g_clear_pointer (&self->textures, g_hash_table_unref);
@@ -232,6 +281,7 @@ gsk_next_driver_init (GskNextDriver *self)
                                               g_object_unref);
   gsk_gl_texture_pool_init (&self->texture_pool);
   self->render_targets = g_ptr_array_new ();
+  self->atlases = g_ptr_array_new_with_free_func ((GDestroyNotify)gsk_gl_texture_atlas_free);
 }
 
 static gboolean
@@ -342,9 +392,9 @@ gsk_next_driver_new (GskGLCommandQueue  *command_queue,
       return NULL;
     }
 
-  self->glyphs = gsk_gl_glyph_library_new (context);
-  self->icons = gsk_gl_icon_library_new (context);
-  self->shadows = gsk_gl_shadow_library_new (context);
+  self->glyphs = gsk_gl_glyph_library_new (self);
+  self->icons = gsk_gl_icon_library_new (self);
+  self->shadows = gsk_gl_shadow_library_new (self);
 
   return g_steal_pointer (&self);
 }

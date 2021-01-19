@@ -1,35 +1,35 @@
-/* gskgltextureatlasprivate.h
- *
- * Copyright 2020 Christian Hergert <chergert@redhat.com>
- *
- * This file is free software; you can redistribute it and/or modify it under
- * the terms of the GNU Lesser General Public License as published by the Free
- * Software Foundation; either version 2.1 of the License, or (at your option)
- * any later version.
- *
- * This file is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public
- * License for more details.
- *
- * You should have received a copy of the GNU General Public License along
- * with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- * SPDX-License-Identifier: LGPL-2.1-or-later
- */
+#ifndef __GSK_GL_TEXTURE_ATLAS_H__
+#define __GSK_GL_TEXTURE_ATLAS_H__
 
-#ifndef __GSK_GL_TEXTURE_ATLAS_PRIVATE_H__
-#define __GSK_GL_TEXTURE_ATLAS_PRIVATE_H__
-
-#include "gskgltypesprivate.h"
+#include "../gl/stb_rect_pack.h"
+#include "gskgldriverprivate.h"
 
 G_BEGIN_DECLS
 
-#define GSK_TYPE_GL_TEXTURE_ATLAS (gsk_gl_texture_atlas_get_type())
+typedef GPtrArray GskGLTextureAtlases;
 
-G_DECLARE_FINAL_TYPE (GskGLTextureAtlas, gsk_gl_texture_atlas, GSK, GL_TEXTURE_ATLAS, GObject)
 
-GskGLTextureAtlas *gsk_gl_texture_atlas_new (void);
+GskGLTextureAtlases *gsk_gl_texture_atlases_new            (void);
+void                 gsk_gl_texture_atlases_begin_frame    (GskGLTextureAtlases      *atlases,
+                                                            GPtrArray                *removed);
+gboolean             gsk_gl_texture_atlases_pack           (GskGLTextureAtlases      *atlases,
+                                                            int                       width,
+                                                            int                       height,
+                                                            GskGLTextureAtlas       **atlas_out,
+                                                            int                      *out_x,
+                                                            int                      *out_y);
+void                 gsk_gl_texture_atlas_init             (GskGLTextureAtlas        *self,
+                                                            int                       width,
+                                                            int                       height);
+void                 gsk_gl_texture_atlas_free             (GskGLTextureAtlas        *self);
+void                 gsk_gl_texture_atlas_realize          (GskGLTextureAtlas        *self);
+gboolean             gsk_gl_texture_atlas_pack             (GskGLTextureAtlas        *self,
+                                                            int                       width,
+                                                            int                       height,
+                                                            int                      *out_x,
+                                                            int                      *out_y);
+double               gsk_gl_texture_atlas_get_unused_ratio (const GskGLTextureAtlas  *self);
+
 
 G_END_DECLS
 

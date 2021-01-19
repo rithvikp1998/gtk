@@ -59,7 +59,6 @@ gsk_private_sources = files([
   'next/gskglprogram.c',
   'next/gskglrenderjob.c',
   'next/gskglshadowlibrary.c',
-  'next/gskgltextureatlas.c',
   'next/gskgltexturelibrary.c',
   'next/gskgluniformstate.c',
   'next/gskgltexturepool.c',

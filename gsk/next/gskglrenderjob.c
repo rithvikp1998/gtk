@@ -2524,6 +2524,7 @@ gsk_gl_render_job_visit_text_node (GskGLRenderJob *job,
       float tx, ty, tx2, ty2;
       float cx;
       float cy;
+      guint texture_id;
 
       if (gi->glyph == PANGO_GLYPH_EMPTY)
         continue;
@@ -2536,27 +2537,27 @@ gsk_gl_render_job_visit_text_node (GskGLRenderJob *job,
       if (!gsk_gl_glyph_library_lookup_or_add (library, &lookup, &glyph))
         goto next;
 
-      g_assert (glyph->texture_id != 0);
+      texture_id = GSK_GL_TEXTURE_ATLAS_ENTRY_TEXTURE (glyph);
 
-      if (last_texture != glyph->texture_id)
+      if (last_texture != texture_id)
         {
           gsk_gl_program_set_uniform_texture (program,
                                               UNIFORM_SHARED_SOURCE,
                                               GL_TEXTURE_2D,
                                               GL_TEXTURE0,
-                                              glyph->texture_id);
-          last_texture = glyph->texture_id;
+                                              texture_id);
+          last_texture = texture_id;
         }
 
-      tx  = glyph->tx;
-      ty  = glyph->ty;
-      tx2 = tx + glyph->tw;
-      ty2 = ty + glyph->th;
+      tx = glyph->entry.area.origin.x;
+      ty = glyph->entry.area.origin.y;
+      tx2 = tx + glyph->entry.area.size.width;
+      ty2 = ty + glyph->entry.area.size.height;
 
-      glyph_x = floor (x + cx + 0.125) + glyph->draw_x;
-      glyph_y = floor (y + cy + 0.125) + glyph->draw_y;
-      glyph_x2 = glyph_x + glyph->draw_width;
-      glyph_y2 = glyph_y + glyph->draw_height;
+      glyph_x = floor (x + cx + 0.125) + glyph->ink_rect.x;
+      glyph_y = floor (y + cy + 0.125) + glyph->ink_rect.y;
+      glyph_x2 = glyph_x + glyph->ink_rect.width;
+      glyph_y2 = glyph_y + glyph->ink_rect.height;
 
       vertices = gsk_gl_command_queue_add_vertices (job->command_queue, NULL);
 

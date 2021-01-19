@@ -20,6 +20,7 @@
 
 #include "config.h"
 
+#include "gskgldriverprivate.h"
 #include "gskgliconlibraryprivate.h"
 
 struct _GskGLIconLibrary
@@ -30,12 +31,12 @@ struct _GskGLIconLibrary
 G_DEFINE_TYPE (GskGLIconLibrary, gsk_gl_icon_library, GSK_TYPE_GL_TEXTURE_LIBRARY)
 
 GskGLIconLibrary *
-gsk_gl_icon_library_new (GdkGLContext *context)
+gsk_gl_icon_library_new (GskNextDriver *driver)
 {
-  g_return_val_if_fail (GDK_IS_GL_CONTEXT (context), NULL);
+  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (driver), NULL);
 
   return g_object_new (GSK_TYPE_GL_ICON_LIBRARY,
-                       "context", context,
+                       "driver", driver,
                        NULL);
 }
 

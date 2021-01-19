@@ -35,7 +35,7 @@ typedef struct _GskGLShadowKey
 
 G_DECLARE_FINAL_TYPE (GskGLShadowLibrary, gsk_gl_shadow_library, GSK, GL_SHADOW_LIBRARY, GskGLTextureLibrary)
 
-GskGLShadowLibrary *gsk_gl_shadow_library_new (GdkGLContext *context);
+GskGLShadowLibrary *gsk_gl_shadow_library_new (GskNextDriver *driver);
 
 G_END_DECLS
 

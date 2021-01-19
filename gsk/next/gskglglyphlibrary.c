@@ -20,17 +20,20 @@
 
 #include "config.h"
 
+#include "gskgldriverprivate.h"
 #include "gskglglyphlibraryprivate.h"
+
+#define MAX_GLYPH_SIZE 128
 
 G_DEFINE_TYPE (GskGLGlyphLibrary, gsk_gl_glyph_library, GSK_TYPE_GL_TEXTURE_LIBRARY)
 
 GskGLGlyphLibrary *
-gsk_gl_glyph_library_new (GdkGLContext *context)
+gsk_gl_glyph_library_new (GskNextDriver *driver)
 {
-  g_return_val_if_fail (GDK_IS_GL_CONTEXT (context), NULL);
+  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (driver), NULL);
 
   return g_object_new (GSK_TYPE_GL_GLYPH_LIBRARY,
-                       "context", context,
+                       "driver", driver,
                        NULL);
 }
 
@@ -93,10 +96,12 @@ gsk_gl_glyph_library_class_init (GskGLGlyphLibraryClass *klass)
 static void
 gsk_gl_glyph_library_init (GskGLGlyphLibrary *self)
 {
-  self->hash_table = g_hash_table_new_full (gsk_gl_glyph_key_hash,
-                                            gsk_gl_glyph_key_equal,
-                                            gsk_gl_glyph_key_free,
-                                            gsk_gl_glyph_value_free);
+  GSK_GL_TEXTURE_LIBRARY (self)->max_entry_size = MAX_GLYPH_SIZE;
+  gsk_gl_texture_library_set_funcs (GSK_GL_TEXTURE_LIBRARY (self),
+                                    gsk_gl_glyph_key_hash,
+                                    gsk_gl_glyph_key_equal,
+                                    gsk_gl_glyph_key_free,
+                                    gsk_gl_glyph_value_free);
 }
 
 gboolean
@@ -104,9 +109,36 @@ gsk_gl_glyph_library_add (GskGLGlyphLibrary      *self,
                           const GskGLGlyphKey    *key,
                           const GskGLGlyphValue **out_value)
 {
+  PangoRectangle ink_rect;
+  GskGLGlyphValue *value;
+  int width;
+  int height;
+
   g_assert (GSK_IS_GL_GLYPH_LIBRARY (self));
   g_assert (key != NULL);
   g_assert (out_value != NULL);
 
-  return FALSE;
+  pango_font_get_glyph_extents (key->font, key->glyph, &ink_rect, NULL);
+  pango_extents_to_pixels (&ink_rect, NULL);
+
+  if (key->xshift != 0)
+    ink_rect.width++;
+  if (key->yshift != 0)
+    ink_rect.height++;
+
+  width = ink_rect.width * key->scale / 1024;
+  height = ink_rect.height * key->scale / 1024;
+
+  value = gsk_gl_texture_library_pack (GSK_GL_TEXTURE_LIBRARY (self),
+                                       key,
+                                       sizeof *key,
+                                       sizeof *value,
+                                       width,
+                                       height);
+
+  memcpy (&value->ink_rect, &ink_rect, sizeof ink_rect);
+
+
+
+  return TRUE;
 }

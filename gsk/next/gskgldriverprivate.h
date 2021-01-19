@@ -95,6 +95,8 @@ struct _GskNextDriver
   GHashTable *key_to_texture_id;
   GHashTable *texture_id_to_key;
 
+  GPtrArray *atlases;
+
   GHashTable *shader_cache;
 
   GArray *autorelease_framebuffers;
@@ -114,45 +116,46 @@ struct _GskNextDriver
   guint in_frame : 1;
 };
 
-GskNextDriver *gsk_next_driver_new                   (GskGLCommandQueue    *command_queue,
-                                                      gboolean              debug,
-                                                      GError              **error);
-GdkGLContext  *gsk_next_driver_get_context           (GskNextDriver        *self);
-gboolean       gsk_next_driver_create_render_target  (GskNextDriver        *self,
-                                                      int                   width,
-                                                      int                   height,
-                                                      int                   min_filter,
-                                                      int                   mag_filter,
-                                                      GskGLRenderTarget   **render_target);
-guint          gsk_next_driver_release_render_target (GskNextDriver        *self,
-                                                      GskGLRenderTarget    *render_target,
-                                                      gboolean              release_texture);
-void           gsk_next_driver_begin_frame           (GskNextDriver        *self);
-void           gsk_next_driver_end_frame             (GskNextDriver        *self);
-guint          gsk_next_driver_lookup_texture        (GskNextDriver        *self,
-                                                      const GskTextureKey  *key);
-void           gsk_next_driver_cache_texture         (GskNextDriver        *self,
-                                                      const GskTextureKey  *key,
-                                                      guint                 texture_id);
-guint          gsk_next_driver_load_texture          (GskNextDriver        *self,
-                                                      GdkTexture           *texture,
-                                                      int                   min_filter,
-                                                      int                   mag_filter);
-GskGLTexture  *gsk_next_driver_create_texture        (GskNextDriver        *self,
-                                                      float                 width,
-                                                      float                 height,
-                                                      int                   min_filter,
-                                                      int                   mag_filter);
-GskGLTexture  *gsk_next_driver_acquire_texture       (GskNextDriver        *self,
-                                                      float                 width,
-                                                      float                 height,
-                                                      int                   min_filter,
-                                                      int                   mag_filter);
-void           gsk_next_driver_release_texture       (GskNextDriver        *self,
-                                                      GskGLTexture         *texture);
-GskGLProgram  *gsk_next_driver_lookup_shader         (GskNextDriver        *self,
-                                                      GskGLShader          *shader,
-                                                      GError              **error);
+GskNextDriver     *gsk_next_driver_new                   (GskGLCommandQueue    *command_queue,
+                                                          gboolean              debug,
+                                                          GError              **error);
+GdkGLContext      *gsk_next_driver_get_context           (GskNextDriver        *self);
+gboolean           gsk_next_driver_create_render_target  (GskNextDriver        *self,
+                                                          int                   width,
+                                                          int                   height,
+                                                          int                   min_filter,
+                                                          int                   mag_filter,
+                                                          GskGLRenderTarget   **render_target);
+guint              gsk_next_driver_release_render_target (GskNextDriver        *self,
+                                                          GskGLRenderTarget    *render_target,
+                                                          gboolean              release_texture);
+void               gsk_next_driver_begin_frame           (GskNextDriver        *self);
+void               gsk_next_driver_end_frame             (GskNextDriver        *self);
+guint              gsk_next_driver_lookup_texture        (GskNextDriver        *self,
+                                                          const GskTextureKey  *key);
+void               gsk_next_driver_cache_texture         (GskNextDriver        *self,
+                                                          const GskTextureKey  *key,
+                                                          guint                 texture_id);
+guint              gsk_next_driver_load_texture          (GskNextDriver        *self,
+                                                          GdkTexture           *texture,
+                                                          int                   min_filter,
+                                                          int                   mag_filter);
+GskGLTexture      *gsk_next_driver_create_texture        (GskNextDriver        *self,
+                                                          float                 width,
+                                                          float                 height,
+                                                          int                   min_filter,
+                                                          int                   mag_filter);
+GskGLTexture      *gsk_next_driver_acquire_texture       (GskNextDriver        *self,
+                                                          float                 width,
+                                                          float                 height,
+                                                          int                   min_filter,
+                                                          int                   mag_filter);
+void               gsk_next_driver_release_texture       (GskNextDriver        *self,
+                                                          GskGLTexture         *texture);
+GskGLProgram      *gsk_next_driver_lookup_shader         (GskNextDriver        *self,
+                                                          GskGLShader          *shader,
+                                                          GError              **error);
+GskGLTextureAtlas *gsk_next_driver_create_atlas          (GskNextDriver        *self);
 
 G_END_DECLS
 

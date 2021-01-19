@@ -20,40 +20,34 @@
 
 #include "config.h"
 
-#include "gskgltextureatlasprivate.h"
+#include "gskglcommandqueueprivate.h"
+#include "gskgldriverprivate.h"
 #include "gskgltexturelibraryprivate.h"
 
-typedef struct
-{
-  guint  hash;
-  guint  len;
-  guint8 key[0];
-} Entry;
-
-typedef struct
-{
-  GdkGLContext *context;
-  GHashFunc hash_func;
-  GEqualFunc equal_func;
-} GskGLTextureLibraryPrivate;
-
-G_DEFINE_ABSTRACT_TYPE_WITH_PRIVATE (GskGLTextureLibrary, gsk_gl_texture_library, G_TYPE_OBJECT)
+G_DEFINE_ABSTRACT_TYPE (GskGLTextureLibrary, gsk_gl_texture_library, G_TYPE_OBJECT)
 
 enum {
   PROP_0,
-  PROP_CONTEXT,
+  PROP_DRIVER,
   N_PROPS
 };
 
 static GParamSpec *properties [N_PROPS];
 
 static void
+gsk_gl_texture_library_constructed (GObject *object)
+{
+  G_OBJECT_CLASS (gsk_gl_texture_library_parent_class)->constructed (object);
+
+  g_assert (GSK_GL_TEXTURE_LIBRARY (object)->hash_table != NULL);
+}
+
+static void
 gsk_gl_texture_library_dispose (GObject *object)
 {
   GskGLTextureLibrary *self = (GskGLTextureLibrary *)object;
-  GskGLTextureLibraryPrivate *priv = gsk_gl_texture_library_get_instance_private (self);
 
-  g_clear_object (&priv->context);
+  g_clear_object (&self->driver);
 
   G_OBJECT_CLASS (gsk_gl_texture_library_parent_class)->dispose (object);
 }
@@ -65,12 +59,11 @@ gsk_gl_texture_library_get_property (GObject    *object,
                                      GParamSpec *pspec)
 {
   GskGLTextureLibrary *self = GSK_GL_TEXTURE_LIBRARY (object);
-  GskGLTextureLibraryPrivate *priv = gsk_gl_texture_library_get_instance_private (self);
 
   switch (prop_id)
     {
-    case PROP_CONTEXT:
-      g_value_set_object (value, priv->context);
+    case PROP_DRIVER:
+      g_value_set_object (value, self->driver);
       break;
 
     default:
@@ -85,12 +78,11 @@ gsk_gl_texture_library_set_property (GObject      *object,
                                      GParamSpec   *pspec)
 {
   GskGLTextureLibrary *self = GSK_GL_TEXTURE_LIBRARY (object);
-  GskGLTextureLibraryPrivate *priv = gsk_gl_texture_library_get_instance_private (self);
 
   switch (prop_id)
     {
-    case PROP_CONTEXT:
-      priv->context = g_value_dup_object (value);
+    case PROP_DRIVER:
+      self->driver = g_value_dup_object (value);
       break;
 
     default:
@@ -103,15 +95,16 @@ gsk_gl_texture_library_class_init (GskGLTextureLibraryClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
+  object_class->constructed = gsk_gl_texture_library_constructed;
   object_class->dispose = gsk_gl_texture_library_dispose;
   object_class->get_property = gsk_gl_texture_library_get_property;
   object_class->set_property = gsk_gl_texture_library_set_property;
 
-  properties [PROP_CONTEXT] =
-    g_param_spec_object ("context",
-                         "Context",
-                         "Context",
-                         GDK_TYPE_GL_CONTEXT,
+  properties [PROP_DRIVER] =
+    g_param_spec_object ("driver",
+                         "Driver",
+                         "Driver",
+                         GSK_TYPE_NEXT_DRIVER,
                          (G_PARAM_READWRITE | G_PARAM_CONSTRUCT_ONLY | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_properties (object_class, N_PROPS, properties);
@@ -120,21 +113,20 @@ gsk_gl_texture_library_class_init (GskGLTextureLibraryClass *klass)
 static void
 gsk_gl_texture_library_init (GskGLTextureLibrary *self)
 {
-  GskGLTextureLibraryPrivate *priv = gsk_gl_texture_library_get_instance_private (self);
-
-  priv->hash_func = g_direct_hash;
-  priv->equal_func = g_direct_equal;
 }
 
-GdkGLContext *
-gsk_gl_texture_library_get_context (GskGLTextureLibrary *self)
+void
+gsk_gl_texture_library_set_funcs (GskGLTextureLibrary *self,
+                                  GHashFunc            hash_func,
+                                  GEqualFunc           equal_func,
+                                  GDestroyNotify       key_destroy,
+                                  GDestroyNotify       value_destroy)
 {
-  GskGLTextureLibraryPrivate *priv = gsk_gl_texture_library_get_instance_private (self);
+  g_return_if_fail (GSK_IS_GL_TEXTURE_LIBRARY (self));
+  g_return_if_fail (self->hash_table == NULL);
 
-  g_return_val_if_fail (GSK_IS_GL_TEXTURE_LIBRARY (self), NULL);
-  g_return_val_if_fail (GDK_IS_GL_CONTEXT (priv->context), NULL);
-
-  return priv->context;
+  self->hash_table = g_hash_table_new_full (hash_func, equal_func,
+                                            key_destroy, value_destroy);
 }
 
 void
@@ -155,25 +147,145 @@ gsk_gl_texture_library_end_frame (GskGLTextureLibrary *self)
     GSK_GL_TEXTURE_LIBRARY_GET_CLASS (self)->end_frame (self);
 }
 
-gboolean
-gsk_gl_texture_library_pack (GskGLTextureLibrary  *self,
-                             gconstpointer         key,
-                             gsize                 keylen,
-                             float                 width,
-                             float                 height,
-                             GskGLTextureAtlas   **atlas,
-                             graphene_rect_t      *area)
+static GskGLTexture *
+gsk_gl_texture_library_pack_one (GskGLTextureLibrary *self,
+                                 guint                width,
+                                 guint                height)
 {
-  return FALSE;
+  GskGLTexture *texture;
+
+  g_assert (GSK_IS_GL_TEXTURE_LIBRARY (self));
+
+  if (width > self->driver->command_queue->max_texture_size ||
+      height > self->driver->command_queue->max_texture_size)
+    {
+      g_warning ("Clipping requested texture of size %ux%u to maximum allowable size %u.",
+                 width, height, self->driver->command_queue->max_texture_size);
+      width = MIN (width, self->driver->command_queue->max_texture_size);
+      height = MIN (height, self->driver->command_queue->max_texture_size);
+    }
+
+  texture = gsk_next_driver_create_texture (self->driver, width, height, GL_LINEAR, GL_LINEAR);
+  texture->permanent = TRUE;
+
+  return texture;
 }
 
-gboolean
-gsk_gl_texture_library_lookup (GskGLTextureLibrary  *library,
-                               gconstpointer         key,
-                               GskGLTextureAtlas   **atlas,
-                               graphene_rect_t      *area)
+static inline gboolean
+gsk_gl_texture_atlas_pack (GskGLTextureAtlas *self,
+                           int                width,
+                           int                height,
+                           int               *out_x,
+                           int               *out_y)
 {
-  return FALSE;
+  stbrp_rect rect;
+
+  rect.w = width;
+  rect.h = height;
+
+  stbrp_pack_rects (&self->context, &rect, 1);
+
+  if (rect.was_packed)
+    {
+      *out_x = rect.x;
+      *out_y = rect.y;
+    }
+
+  return rect.was_packed;
+}
+
+static void
+gsk_gl_texture_atlases_pack (GskNextDriver      *driver,
+                             int                 width,
+                             int                 height,
+                             GskGLTextureAtlas **out_atlas,
+                             int                *out_x,
+                             int                *out_y)
+{
+  GskGLTextureAtlas *atlas = NULL;
+  int x, y;
+
+  for (guint i = 0; i < driver->atlases->len; i++)
+    {
+      atlas = g_ptr_array_index (driver->atlases, i);
+
+      if (gsk_gl_texture_atlas_pack (atlas, width, height, &x, &y))
+        break;
+
+      atlas = NULL;
+    }
+
+  if (atlas == NULL)
+    {
+      /* No atlas has enough space, so create a new one... */
+      atlas = gsk_next_driver_create_atlas (driver);
+
+      /* Pack it onto that one, which surely has enough space... */
+      if (!gsk_gl_texture_atlas_pack (atlas, width, height, &x, &y))
+        g_assert_not_reached ();
+    }
+
+  *out_atlas = atlas;
+  *out_x = x;
+  *out_y = y;
+}
+
+gpointer
+gsk_gl_texture_library_pack (GskGLTextureLibrary *self,
+                             gconstpointer        key,
+                             gsize                keylen,
+                             gsize                valuelen,
+                             guint                width,
+                             guint                height)
+{
+  GskGLTextureAtlasEntry *entry;
+  GskGLTextureAtlas *atlas = NULL;
+
+  g_assert (GSK_IS_GL_TEXTURE_LIBRARY (self));
+  g_assert (key != NULL);
+  g_assert (keylen > 0);
+  g_assert (valuelen > sizeof (GskGLTextureAtlasEntry));
+
+  entry = g_slice_alloc0 (valuelen);
+  entry->n_pixels = width * height;
+  entry->accessed = TRUE;
+
+  if (width <= self->max_entry_size && height <= self->max_entry_size)
+    {
+      int packed_x;
+      int packed_y;
+
+      gsk_gl_texture_atlases_pack (self->driver,
+                                   width + 2,
+                                   height + 2,
+                                   &atlas,
+                                   &packed_x,
+                                   &packed_y);
+
+      entry->atlas = atlas;
+      entry->is_atlased = TRUE;
+      entry->area.origin.x = (float)(packed_x + 1) / atlas->width;
+      entry->area.origin.y = (float)(packed_y + 1) / atlas->height;
+      entry->area.size.width = width / atlas->width;
+      entry->area.size.height = height / atlas->height;
+    }
+  else
+    {
+      GskGLTexture *texture = gsk_gl_texture_library_pack_one (self, width + 2, height + 2);
+
+      entry->texture = texture;
+      entry->is_atlased = FALSE;
+      entry->area.origin.x = 0.0f;
+      entry->area.origin.y = 0.0f;
+      entry->area.size.width = 1.0f;
+      entry->area.size.height = 1.0f;
+    }
+
+  g_hash_table_insert (self->hash_table,
+                       g_slice_copy (keylen, key),
+                       entry);
+
+  return entry;
 }
 
 void

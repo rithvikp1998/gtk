@@ -22,46 +22,166 @@
 #define __GSK_GL_TEXTURE_LIBRARY_PRIVATE_H__
 
 #include "gskgltypesprivate.h"
+#include "gskgltexturepoolprivate.h"
+#include "../gl/stb_rect_pack.h"
 
 G_BEGIN_DECLS
 
-#define GSK_TYPE_GL_TEXTURE_LIBRARY (gsk_gl_texture_library_get_type())
+#define GSK_TYPE_GL_TEXTURE_LIBRARY            (gsk_gl_texture_library_get_type ())
+#define GSK_GL_TEXTURE_LIBRARY(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GSK_TYPE_GL_TEXTURE_LIBRARY, GskGLTextureLibrary))
+#define GSK_IS_GL_TEXTURE_LIBRARY(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GSK_TYPE_GL_TEXTURE_LIBRARY))
+#define GSK_GL_TEXTURE_LIBRARY_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GSK_TYPE_GL_TEXTURE_LIBRARY, GskGLTextureLibraryClass))
+#define GSK_IS_GL_TEXTURE_LIBRARY_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GSK_TYPE_GL_TEXTURE_LIBRARY))
+#define GSK_GL_TEXTURE_LIBRARY_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GSK_TYPE_GL_TEXTURE_LIBRARY, GskGLTextureLibraryClass))
 
-G_DECLARE_DERIVABLE_TYPE (GskGLTextureLibrary, gsk_gl_texture_library, GSK, GL_TEXTURE_LIBRARY, GObject)
-
-struct _GskGLTextureAtlas
+typedef struct _GskGLTextureAtlas
 {
-  guint texture_id;
-};
+  struct stbrp_context context;
+  struct stbrp_node *nodes;
 
-struct _GskGLTextureLibraryClass
+  int width;
+  int height;
+
+  guint texture_id;
+
+  /* Pixels of rects that have been used at some point,
+   * But are now unused.
+   */
+  int unused_pixels;
+
+  void *user_data;
+} GskGLTextureAtlas;
+
+typedef struct _GskGLTextureAtlasEntry
+{
+  /* A backreference to either the atlas or texture containing
+   * the contents of the atlas entry. For larger items, no atlas
+   * is used and instead a direct texture.
+   */
+  union {
+    GskGLTextureAtlas *atlas;
+    GskGLTexture *texture;
+  };
+
+  /* The area within the atlas translated to 0..1 bounds */
+  graphene_rect_t area;
+
+  /* Number of pixels in the entry, used to calculate usage
+   * of an atlas while processing.
+   */
+  guint n_pixels : 29;
+
+  /* If entry has marked pixels as used in the atlas this frame */
+  guint used : 1;
+
+  /* If entry was accessed this frame */
+  guint accessed : 1;
+
+  /* When true, backref is an atlas, otherwise texture */
+  guint is_atlased : 1;
+
+  /* Suffix data that is per-library specific. gpointer used to
+   * guarantee the alignment for the entries using this.
+   */
+  gpointer data[0];
+} GskGLTextureAtlasEntry;
+
+typedef struct _GskGLTextureLibrary
+{
+  GObject        parent_instance;
+  GskNextDriver *driver;
+  GHashTable    *hash_table;
+  guint          max_entry_size;
+} GskGLTextureLibrary;
+
+typedef struct _GskGLTextureLibraryClass
 {
   GObjectClass parent_class;
 
   void (*begin_frame) (GskGLTextureLibrary *library);
   void (*end_frame)   (GskGLTextureLibrary *library);
-};
+} GskGLTextureLibraryClass;
 
-GdkGLContext *gsk_gl_texture_library_get_context (GskGLTextureLibrary    *self);
-void          gsk_gl_texture_library_set_funcs   (GHashFunc               hash_func,
-                                                  GEqualFunc              equal_func);
-void          gsk_gl_texture_library_begin_frame (GskGLTextureLibrary    *self);
-void          gsk_gl_texture_library_end_frame   (GskGLTextureLibrary    *self);
-gboolean      gsk_gl_texture_library_pack        (GskGLTextureLibrary    *self,
-                                                  gconstpointer           key,
-                                                  gsize                   keylen,
-                                                  float                   width,
-                                                  float                   height,
-                                                  GskGLTextureAtlas     **atlas,
-                                                  graphene_rect_t        *area);
-gboolean      gsk_gl_texture_library_lookup      (GskGLTextureLibrary    *library,
-                                                  gconstpointer           key,
-                                                  GskGLTextureAtlas     **atlas,
-                                                  graphene_rect_t        *area);
-void          gsk_gl_texture_library_upload      (GskGLTextureLibrary    *self,
-                                                  GskGLTextureAtlas      *atlas,
-                                                  const graphene_rect_t  *area,
-                                                  GdkTexture             *texture);
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (GskGLTextureLibrary, g_object_unref)
+
+GType    gsk_gl_texture_library_get_type    (void) G_GNUC_CONST;
+void     gsk_gl_texture_library_set_funcs   (GskGLTextureLibrary    *self,
+                                             GHashFunc               hash_func,
+                                             GEqualFunc              equal_func,
+                                             GDestroyNotify          key_destroy,
+                                             GDestroyNotify          value_destroy);
+void     gsk_gl_texture_library_begin_frame (GskGLTextureLibrary    *self);
+void     gsk_gl_texture_library_end_frame   (GskGLTextureLibrary    *self);
+gpointer gsk_gl_texture_library_pack        (GskGLTextureLibrary    *self,
+                                             gconstpointer           key,
+                                             gsize                   keylen,
+                                             gsize                   valuelen,
+                                             guint                   width,
+                                             guint                   height);
+void     gsk_gl_texture_library_upload      (GskGLTextureLibrary    *self,
+                                             GskGLTextureAtlas      *atlas,
+                                             const graphene_rect_t  *area,
+                                             GdkTexture             *texture);
+
+static inline void
+gsk_gl_texture_atlas_mark_unused (GskGLTextureAtlas *self,
+                                  int                n_pixels)
+{
+  self->unused_pixels += n_pixels;
+}
+
+static inline void
+gsk_gl_texture_atlas_mark_used (GskGLTextureAtlas *self,
+                                int                n_pixels)
+{
+  self->unused_pixels -= n_pixels;
+}
+
+static inline gboolean
+gsk_gl_texture_library_lookup (GskGLTextureLibrary     *self,
+                               gconstpointer            key,
+                               GskGLTextureAtlasEntry **out_entry)
+{
+  GskGLTextureAtlasEntry *entry = g_hash_table_lookup (self->hash_table, key);
+
+  if G_LIKELY (entry != NULL && entry->accessed && entry->used)
+    {
+      *out_entry = entry;
+      return TRUE;
+    }
+
+  if (entry != NULL)
+    {
+      if (!entry->used && entry->is_atlased)
+        {
+          g_assert (entry->atlas != NULL);
+          gsk_gl_texture_atlas_mark_used (entry->atlas, entry->n_pixels);
+          entry->used = TRUE;
+        }
+
+      entry->accessed = TRUE;
+      *out_entry = entry;
+      return TRUE;
+    }
+
+  return FALSE;
+}
+
+static inline guint
+GSK_GL_TEXTURE_ATLAS_ENTRY_TEXTURE (gconstpointer d)
+{
+  const GskGLTextureAtlasEntry *e = d;
+
+  return e->is_atlased ? e->atlas->texture_id : e->texture->texture_id;
+}
+
+static inline double
+gsk_gl_texture_atlas_get_unused_ratio (const GskGLTextureAtlas *self)
+{
+  if (self->unused_pixels > 0)
+    return (double)(self->unused_pixels) / (double)(self->width * self->height);
+  return 0.0;
+}
 
 G_END_DECLS
 

@@ -31,7 +31,7 @@ G_BEGIN_DECLS
 
 G_DECLARE_FINAL_TYPE (GskGLIconLibrary, gsk_gl_icon_library, GSK, GL_ICON_LIBRARY, GskGLTextureLibrary)
 
-GskGLIconLibrary *gsk_gl_icon_library_new (GdkGLContext *context);
+GskGLIconLibrary *gsk_gl_icon_library_new (GskNextDriver *driver);
 
 G_END_DECLS
 

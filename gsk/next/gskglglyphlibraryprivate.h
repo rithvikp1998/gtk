@@ -27,6 +27,8 @@
 
 G_BEGIN_DECLS
 
+#define GSK_TYPE_GL_GLYPH_LIBRARY (gsk_gl_glyph_library_get_type())
+
 typedef struct _GskGLGlyphKey
 {
   PangoFont *font;
@@ -36,32 +38,17 @@ typedef struct _GskGLGlyphKey
   guint scale  : 26; /* times 1024 */
 } GskGLGlyphKey;
 
+typedef struct _GskGLGlyphValue
+{
+  GskGLTextureAtlasEntry entry;
+  PangoRectangle ink_rect;
+} GskGLGlyphValue;
+
 #if GLIB_SIZEOF_VOID_P == 8
 G_STATIC_ASSERT (sizeof (GskGLGlyphKey) == 16);
 #elif GLIB_SIZEOF_VOID_P == 4
 G_STATIC_ASSERT (sizeof (GskGLGlyphKey) == 12);
 #endif
-
-typedef struct _GskGLGlyphValue
-{
-  GskGLTextureAtlas *atlas;
-  guint texture_id;
-
-  float tx;
-  float ty;
-  float tw;
-  float th;
-
-  int draw_x;
-  int draw_y;
-  int draw_width;
-  int draw_height;
-
-  guint accessed : 1; /* accessed since last check */
-  guint used     : 1; /* accounted as used in the atlas */
-} GskGLGlyphValue;
-
-#define GSK_TYPE_GL_GLYPH_LIBRARY (gsk_gl_glyph_library_get_type())
 
 G_DECLARE_FINAL_TYPE (GskGLGlyphLibrary, gsk_gl_glyph_library, GSK, GL_GLYPH_LIBRARY, GskGLTextureLibrary)
 
@@ -71,7 +58,7 @@ struct _GskGLGlyphLibrary
   GHashTable *hash_table;
 };
 
-GskGLGlyphLibrary *gsk_gl_glyph_library_new (GdkGLContext           *context);
+GskGLGlyphLibrary *gsk_gl_glyph_library_new (GskNextDriver          *driver);
 gboolean           gsk_gl_glyph_library_add (GskGLGlyphLibrary      *self,
                                              const GskGLGlyphKey    *key,
                                              const GskGLGlyphValue **out_value);
@@ -98,32 +85,12 @@ gsk_gl_glyph_library_lookup_or_add (GskGLGlyphLibrary      *self,
                                     const GskGLGlyphKey    *key,
                                     const GskGLGlyphValue **out_value)
 {
-  GskGLGlyphValue *value = g_hash_table_lookup (self->hash_table, key);
+  GskGLTextureAtlasEntry *entry;
 
-  /* Optimize for the fast path (repeated lookups of a character */
-  if G_LIKELY (value && value->accessed && value->used)
+  if G_LIKELY (gsk_gl_texture_library_lookup ((GskGLTextureLibrary *)self, key, &entry))
     {
-      *out_value = value;
-      return value->texture_id > 0;
-    }
-
-  /* We found it, but haven't marked as used for this frame */
-  if (value != NULL)
-    {
-      value->accessed = TRUE;
-
-      if (!value->used)
-        {
-          gsk_gl_texture_library_mark_used (self,
-                                            value->atlas,
-                                            value->draw_width,
-                                            value->draw_height);
-          value->used = TRUE;
-        }
-
-      *out_value = value;
-
-      return value->texture_id > 0;
+      *out_value = (GskGLGlyphValue *)entry;
+      return TRUE;
     }
 
   return gsk_gl_glyph_library_add (self, key, out_value);
