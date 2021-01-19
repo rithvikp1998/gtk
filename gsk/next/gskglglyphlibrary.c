@@ -305,5 +305,5 @@ gsk_gl_glyph_library_add (GskGLGlyphLibrary      *self,
 
   *out_value = value;
 
-  return TRUE;
+  return GSK_GL_TEXTURE_ATLAS_ENTRY_TEXTURE (value) != 0;
 }
