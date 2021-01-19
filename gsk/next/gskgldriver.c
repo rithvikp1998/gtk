@@ -81,6 +81,23 @@ gsk_gl_texture_free (gpointer data)
     }
 }
 
+static inline void
+write_atlas_to_png (GskGLTextureAtlas *atlas,
+                    const char        *filename)
+{
+  int stride = cairo_format_stride_for_width (CAIRO_FORMAT_ARGB32, atlas->width);
+  guchar *data = g_malloc (atlas->height * stride);
+  cairo_surface_t *s;
+
+  glBindTexture (GL_TEXTURE_2D, atlas->texture_id);
+  glGetTexImage (GL_TEXTURE_2D, 0, GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, data);
+  s = cairo_image_surface_create_for_data (data, CAIRO_FORMAT_ARGB32, atlas->width, atlas->height, stride);
+  cairo_surface_write_to_png (s, filename);
+
+  cairo_surface_destroy (s);
+  g_free (data);
+}
+
 static void
 remove_texture_key_for_id (GskNextDriver *self,
                            guint          texture_id)
@@ -447,6 +464,18 @@ gsk_next_driver_end_frame (GskNextDriver *self)
   g_return_if_fail (self->in_frame == TRUE);
 
   gdk_gl_context_make_current (self->command_queue->context);
+
+#if 0
+  /* Dump all the texture atlases for exploration */
+  for (guint i = 0; i < self->atlases->len; i++)
+    {
+      GskGLTextureAtlas *atlas = g_ptr_array_index (self->atlases, i);
+      char *filename = g_strdup_printf ("frame-%d-atlas-%d.png",
+                                        (int)self->current_frame_id,
+                                        atlas->texture_id);
+      write_atlas_to_png (atlas, filename);
+    }
+#endif
 
   gsk_gl_command_queue_end_frame (self->command_queue);
 
