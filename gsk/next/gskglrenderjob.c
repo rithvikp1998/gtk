@@ -2503,7 +2503,6 @@ gsk_gl_render_job_visit_text_node (GskGLRenderJob *job,
       gsk_gl_program_set_uniform_color (program, UNIFORM_COLORING_COLOR, color);
     }
 
-  memset (&lookup, 0, sizeof lookup);
   lookup.font = (PangoFont *)font;
   lookup.scale = (guint) (text_scale * 1024);
 
@@ -2586,10 +2585,10 @@ gsk_gl_render_job_visit_text_node (GskGLRenderJob *job,
       vertices[4].uv[0] = tx;
       vertices[4].uv[1] = ty2;
 
-      vertices[4].position[0] = glyph_x2;
-      vertices[4].position[1] = glyph_y;
-      vertices[4].uv[0] = tx2;
-      vertices[4].uv[1] = ty;
+      vertices[5].position[0] = glyph_x2;
+      vertices[5].position[1] = glyph_y;
+      vertices[5].uv[0] = tx2;
+      vertices[5].uv[1] = ty;
 
 next:
       x_position += gi->geometry.width;
