@@ -35,6 +35,7 @@
 #include "gskglcommandqueueprivate.h"
 #include "gskgldriverprivate.h"
 #include "gskglglyphlibraryprivate.h"
+#include "gskgliconlibraryprivate.h"
 #include "gskglprogramprivate.h"
 #include "gskglrenderjobprivate.h"
 #include "gskglshadowlibraryprivate.h"
@@ -47,7 +48,6 @@
 #define X2(r) ((r)->origin.x + (r)->size.width)
 #define Y1(r) ((r)->origin.y)
 #define Y2(r) ((r)->origin.y + (r)->size.height)
-
 
 #define rounded_rect_top_left(r)                                                        \
   (GRAPHENE_RECT_INIT(r->bounds.origin.x,                                               \
@@ -2990,10 +2990,63 @@ gsk_gl_render_job_visit_gl_shader_node (GskGLRenderJob *job,
 }
 
 static void
+gsk_gl_render_job_upload_texture (GskGLRenderJob       *job,
+                                  GdkTexture           *texture,
+                                  GskGLRenderOffscreen *offscreen)
+{
+  if (gsk_gl_texture_library_can_cache (GSK_GL_TEXTURE_LIBRARY (job->driver->icons),
+                                        texture->width,
+                                        texture->height) &&
+      !GDK_IS_GL_TEXTURE (texture))
+    {
+      const GskGLIconData *icon_data;
+      gsk_gl_icon_library_lookup_or_add (job->driver->icons,
+                                         texture,
+                                         &icon_data);
+      offscreen->texture_id = GSK_GL_TEXTURE_ATLAS_ENTRY_TEXTURE (icon_data);
+      offscreen->area = icon_data->entry.area;
+    }
+  else
+    {
+      offscreen->texture_id = gsk_next_driver_load_texture (job->driver, texture, GL_LINEAR, GL_LINEAR);
+      init_full_texture_region (&offscreen->area);
+    }
+}
+
+static void
 gsk_gl_render_job_visit_texture_node (GskGLRenderJob *job,
                                       GskRenderNode  *node)
 {
-  gsk_gl_render_job_visit_as_fallback (job, node);
+  GdkTexture *texture = gsk_texture_node_get_texture (node);
+  int max_texture_size = job->command_queue->max_texture_size;
+
+  if G_LIKELY (texture->width <= max_texture_size &&
+               texture->height <= max_texture_size)
+    {
+      GskGLRenderOffscreen offscreen = {0};
+
+      gsk_gl_render_job_upload_texture (job, texture, &offscreen);
+
+      gsk_gl_program_begin_draw (job->driver->blit,
+                                 &job->viewport,
+                                 &job->projection,
+                                 gsk_gl_render_job_get_modelview_matrix (job),
+                                 gsk_gl_render_job_get_clip (job),
+                                 job->alpha);
+      gsk_gl_program_set_uniform_texture (job->driver->blit,
+                                          UNIFORM_SHARED_SOURCE,
+                                          GL_TEXTURE_2D,
+                                          GL_TEXTURE0,
+                                          offscreen.texture_id);
+      gsk_gl_render_job_load_vertices_from_offscreen (job, &node->bounds, &offscreen);
+      gsk_gl_program_end_draw (job->driver->blit);
+    }
+  else
+    {
+#if 0
+      g_warning ("TODO: Slice too large texture\n");
+#endif
+    }
 }
 
 static void
