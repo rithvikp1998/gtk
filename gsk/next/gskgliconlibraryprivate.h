@@ -29,9 +29,31 @@ G_BEGIN_DECLS
 
 #define GSK_TYPE_GL_ICON_LIBRARY (gsk_gl_icon_library_get_type())
 
+typedef struct _GskGLIconData
+{
+  GskGLTextureAtlasEntry entry;
+  GdkTexture *source_texture;
+} GskGLIconData;
+
 G_DECLARE_FINAL_TYPE (GskGLIconLibrary, gsk_gl_icon_library, GSK, GL_ICON_LIBRARY, GskGLTextureLibrary)
 
-GskGLIconLibrary *gsk_gl_icon_library_new (GskNextDriver *driver);
+GskGLIconLibrary *gsk_gl_icon_library_new (GskNextDriver        *driver);
+void              gsk_gl_icon_library_add (GskGLIconLibrary     *self,
+                                           GdkTexture           *key,
+                                           const GskGLIconData **out_value);
+
+static inline void
+gsk_gl_icon_library_lookup_or_add (GskGLIconLibrary     *self,
+                                   GdkTexture           *key,
+                                   const GskGLIconData **out_value)
+{
+  GskGLTextureAtlasEntry *entry;
+
+  if G_LIKELY (gsk_gl_texture_library_lookup ((GskGLTextureLibrary *)self, key, &entry))
+    *out_value = (GskGLIconData *)entry;
+  else
+    gsk_gl_icon_library_add (self, key, out_value);
+}
 
 G_END_DECLS
 
