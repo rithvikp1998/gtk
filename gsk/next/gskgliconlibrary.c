@@ -61,6 +61,7 @@ gsk_gl_icon_library_class_init (GskGLIconLibraryClass *klass)
 static void
 gsk_gl_icon_library_init (GskGLIconLibrary *self)
 {
+  GSK_GL_TEXTURE_LIBRARY (self)->max_entry_size = 128;
   gsk_gl_texture_library_set_funcs (GSK_GL_TEXTURE_LIBRARY (self),
                                     NULL, NULL, NULL,
                                     gsk_gl_icon_data_free);
