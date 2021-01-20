@@ -183,6 +183,14 @@ gsk_gl_texture_atlas_get_unused_ratio (const GskGLTextureAtlas *self)
   return 0.0;
 }
 
+static inline gboolean
+gsk_gl_texture_library_can_cache (GskGLTextureLibrary *self,
+                                  int                  width,
+                                  int                  height)
+{
+  return width <= self->max_entry_size && height <= self->max_entry_size;
+}
+
 G_END_DECLS
 
 #endif /* __GSK_GL_TEXTURE_LIBRARY_PRIVATE_H__ */
