@@ -630,8 +630,14 @@ gsk_gl_render_job_transform_rounded_rect (GskGLRenderJob       *job,
                                           const GskRoundedRect *rect,
                                           GskRoundedRect       *out_rect)
 {
-  gsk_gl_render_job_transform_bounds (job, &rect->bounds, &out_rect->bounds);
-  memcpy (out_rect->corner, rect->corner, sizeof out_rect->corner);
+  out_rect->bounds.origin.x = job->offset_x + rect->bounds.origin.x;
+  out_rect->bounds.origin.y = job->offset_y + rect->bounds.origin.y;
+  out_rect->bounds.size.width = rect->bounds.size.width;
+  out_rect->bounds.size.height = rect->bounds.size.height;
+  out_rect->corner[0] = rect->corner[0];
+  out_rect->corner[1] = rect->corner[1];
+  out_rect->corner[2] = rect->corner[2];
+  out_rect->corner[3] = rect->corner[3];
 }
 
 static inline gboolean
