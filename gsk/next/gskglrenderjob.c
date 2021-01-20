@@ -2837,6 +2837,8 @@ gsk_gl_render_job_visit_color_matrix_node (GskGLRenderJob *job,
   if (!gsk_gl_render_job_visit_node_with_offscreen (job, child, &offscreen))
     g_assert_not_reached ();
 
+  g_assert (offscreen.texture_id > 0);
+
   graphene_vec4_to_float (gsk_color_matrix_node_get_color_offset (node), offset);
 
   gsk_gl_program_begin_draw (job->driver->color_matrix,
@@ -2845,6 +2847,11 @@ gsk_gl_render_job_visit_color_matrix_node (GskGLRenderJob *job,
                              gsk_gl_render_job_get_modelview_matrix (job),
                              gsk_gl_render_job_get_clip (job),
                              job->alpha);
+  gsk_gl_program_set_uniform_texture (job->driver->color_matrix,
+                                      UNIFORM_SHARED_SOURCE,
+                                      GL_TEXTURE_2D,
+                                      GL_TEXTURE0,
+                                      offscreen.texture_id);
   gsk_gl_program_set_uniform_matrix (job->driver->color_matrix,
                                      UNIFORM_COLOR_MATRIX_COLOR_MATRIX,
                                      gsk_color_matrix_node_get_color_matrix (node));
@@ -2852,6 +2859,7 @@ gsk_gl_render_job_visit_color_matrix_node (GskGLRenderJob *job,
                                  UNIFORM_COLOR_MATRIX_COLOR_OFFSET,
                                  1,
                                  offset);
+  gsk_gl_render_job_load_vertices_from_offscreen (job, &node->bounds, &offscreen);
   gsk_gl_program_end_draw (job->driver->color_matrix);
 }
 
