@@ -277,8 +277,8 @@ gsk_gl_texture_library_pack (GskGLTextureLibrary *self,
       entry->is_atlased = TRUE;
       entry->area.origin.x = (float)(packed_x + 1) / atlas->width;
       entry->area.origin.y = (float)(packed_y + 1) / atlas->height;
-      entry->area.size.width = width / atlas->width;
-      entry->area.size.height = height / atlas->height;
+      entry->area.size.width = (float)width / atlas->width;
+      entry->area.size.height = (float)height / atlas->height;
     }
   else
     {
