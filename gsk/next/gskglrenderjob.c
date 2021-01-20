@@ -2544,6 +2544,8 @@ gsk_gl_render_job_visit_text_node (GskGLRenderJob *job,
 
       texture_id = GSK_GL_TEXTURE_ATLAS_ENTRY_TEXTURE (glyph);
 
+      g_assert (texture_id > 0);
+
       if G_UNLIKELY (last_texture != texture_id)
         {
           gsk_gl_program_end_draw (program);

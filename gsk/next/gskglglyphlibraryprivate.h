@@ -88,18 +88,19 @@ gsk_gl_glyph_library_lookup_or_add (GskGLGlyphLibrary      *self,
                                     const GskGLGlyphValue **out_value)
 {
   GskGLTextureAtlasEntry *entry;
-  GskGLGlyphKey *k;
 
   if G_LIKELY (gsk_gl_texture_library_lookup ((GskGLTextureLibrary *)self, key, &entry))
     {
       *out_value = (GskGLGlyphValue *)entry;
-      return TRUE;
+    }
+  else
+    {
+      GskGLGlyphKey *k = g_slice_copy (sizeof *key, key);
+      g_object_ref (k->font);
+      gsk_gl_glyph_library_add (self, k, out_value);
     }
 
-  k = g_slice_copy (sizeof *key, key);
-  g_object_ref (k->font);
-
-  return gsk_gl_glyph_library_add (self, k, out_value);
+  return GSK_GL_TEXTURE_ATLAS_ENTRY_TEXTURE (*out_value) != 0;
 }
 
 G_END_DECLS
