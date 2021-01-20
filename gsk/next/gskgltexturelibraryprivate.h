@@ -188,6 +188,7 @@ gsk_gl_texture_library_can_cache (GskGLTextureLibrary *self,
                                   int                  width,
                                   int                  height)
 {
+  g_assert (self->max_entry_size > 0);
   return width <= self->max_entry_size && height <= self->max_entry_size;
 }
 
