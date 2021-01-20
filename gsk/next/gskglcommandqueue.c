@@ -365,11 +365,17 @@ gsk_gl_command_queue_uniform_snapshot_cb (const GskGLUniformInfo *info,
 void
 gsk_gl_command_queue_end_draw (GskGLCommandQueue *self)
 {
+  GskGLCommandBatch *last_batch;
   GskGLCommandBatch *batch;
 
   g_return_if_fail (GSK_IS_GL_COMMAND_QUEUE (self));
   g_return_if_fail (self->batches->len > 0);
   g_return_if_fail (self->in_draw == TRUE);
+
+  if (self->batches->len > 1)
+    last_batch = &g_array_index (self->batches, GskGLCommandBatch, self->batches->len - 2);
+  else
+    last_batch = NULL;
 
   batch = &g_array_index (self->batches, GskGLCommandBatch, self->batches->len - 1);
 
@@ -416,7 +422,25 @@ gsk_gl_command_queue_end_draw (GskGLCommandQueue *self)
         }
     }
 
-  enqueue_batch (self);
+  /* Do simple chaining of draw to last batch. */
+  /* TODO: Use merging capabilities for out-or-order batching */
+  if (last_batch != NULL &&
+      last_batch->any.kind == GSK_GL_COMMAND_KIND_DRAW &&
+      last_batch->any.program == batch->any.program &&
+      last_batch->any.viewport.width == batch->any.viewport.width &&
+      last_batch->any.viewport.height == batch->any.viewport.height &&
+      last_batch->draw.framebuffer == batch->draw.framebuffer &&
+      batch->draw.uniform_count == 0 &&
+      batch->draw.bind_count == 0 &&
+      last_batch->draw.vbo_offset + last_batch->draw.vbo_count == batch->draw.vbo_offset)
+    {
+      last_batch->draw.vbo_count += batch->draw.vbo_count;
+      discard_batch (self);
+    }
+  else
+    {
+      enqueue_batch (self);
+    }
 
   self->in_draw = FALSE;
 }
