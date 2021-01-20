@@ -407,7 +407,7 @@ gsk_gl_command_queue_end_draw (GskGLCommandQueue *self)
     {
       GskGLBindTexture *texture = &self->attachments->textures[i];
 
-      if (texture->changed)
+      if (texture->changed && texture->id > 0)
         {
           GskGLCommandBind bind;
 
