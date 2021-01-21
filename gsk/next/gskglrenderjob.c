@@ -29,6 +29,7 @@
 #include <gsk/gskglshaderprivate.h>
 #include <gdk/gdktextureprivate.h>
 #include <gsk/gsktransformprivate.h>
+#include <gsk/gskroundedrectprivate.h>
 #include <math.h>
 #include <string.h>
 
@@ -3419,7 +3420,7 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
   gsk_gl_render_job_set_modelview (job, gsk_transform_scale (NULL, scale_x, scale_y));
 
   if (offscreen->reset_clip)
-    gsk_gl_render_job_push_clip (job, &(GskRoundedRect) { .bounds = job->viewport });
+    gsk_gl_render_job_push_clip (job, &GSK_ROUNDED_RECT_INIT_FROM_RECT (job->viewport));
 
   job->offset_x = 0;
   job->offset_y = 0;
