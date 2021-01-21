@@ -672,32 +672,32 @@ gsk_gl_render_job_load_vertices_from_offscreen (GskGLRenderJob             *job,
 
   vertices[0].position[0] = min_x;
   vertices[0].position[1] = min_y;
-  vertices[0].uv[0] = X1 (bounds);
+  vertices[0].uv[0] = X1 (&offscreen->area);
   vertices[0].uv[1] = y1;
 
   vertices[1].position[0] = min_x;
   vertices[1].position[1] = max_y;
-  vertices[1].uv[0] = X1 (bounds);
+  vertices[1].uv[0] = X1 (&offscreen->area);
   vertices[1].uv[1] = y2;
 
   vertices[2].position[0] = max_x;
   vertices[2].position[1] = min_y;
-  vertices[2].uv[0] = X2 (bounds);
+  vertices[2].uv[0] = X2 (&offscreen->area);
   vertices[2].uv[1] = y1;
 
   vertices[3].position[0] = max_x;
   vertices[3].position[1] = max_y;
-  vertices[3].uv[0] = X2 (bounds);
+  vertices[3].uv[0] = X2 (&offscreen->area);
   vertices[3].uv[1] = y2;
 
   vertices[4].position[0] = min_x;
   vertices[4].position[1] = max_y;
-  vertices[4].uv[0] = X1 (bounds);
+  vertices[4].uv[0] = X1 (&offscreen->area);
   vertices[4].uv[1] = y2;
 
   vertices[5].position[0] = max_x;
   vertices[5].position[1] = min_y;
-  vertices[5].uv[0] = X2 (bounds);
+  vertices[5].uv[0] = X2 (&offscreen->area);
   vertices[5].uv[1] = y1;
 }
 
