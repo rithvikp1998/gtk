@@ -515,6 +515,12 @@ gsk_gl_render_job_pop_modelview (GskGLRenderJob *job)
 }
 
 static inline gboolean
+gsk_gl_render_job_has_clip (GskGLRenderJob *job)
+{
+  return job->clip->len > 1;
+}
+
+static inline gboolean
 gsk_gl_render_job_clip_is_rectilinear (GskGLRenderJob *job)
 {
   if (job->clip->len == 0)
@@ -1358,7 +1364,7 @@ gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
    * which both have rounded corners.
    */
 
-  if (job->clip->len <= 1)
+  if (!gsk_gl_render_job_has_clip (job))
     need_offscreen = FALSE;
   else if (rounded_inner_rect_contains_rect (&current_clip, &transformed_clip.bounds))
     need_offscreen = FALSE;
