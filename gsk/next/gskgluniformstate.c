@@ -572,7 +572,7 @@ gsk_gl_uniform_state_set_texture (GskGLUniformState *state,
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_TEXTURE, 1, location, &info)))
     {
-      if (*u != texture_slot)
+      if (*u != texture_slot || info->initial)
         {
           REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_TEXTURE, 1);
           *u = texture_slot;
