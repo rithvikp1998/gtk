@@ -3539,6 +3539,13 @@ gsk_gl_render_job_render (GskGLRenderJob *job,
   gsk_gl_render_job_visit_node (job, root);
   gdk_gl_context_pop_debug_group (context);
 
+#if 0
+  /* At this point the atlases have uploaded content while we processed
+   * nodes but have not necessarily been used by the commands in the queue.
+   */
+  gsk_next_driver_save_atlases_to_png (job->driver, NULL);
+#endif
+
   gdk_gl_context_push_debug_group (context, "Executing command queue");
   gsk_gl_command_queue_execute (job->command_queue);
   gdk_gl_context_pop_debug_group (context);

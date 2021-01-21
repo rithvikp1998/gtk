@@ -465,18 +465,6 @@ gsk_next_driver_end_frame (GskNextDriver *self)
 
   gdk_gl_context_make_current (self->command_queue->context);
 
-#if 0
-  /* Dump all the texture atlases for exploration */
-  for (guint i = 0; i < self->atlases->len; i++)
-    {
-      GskGLTextureAtlas *atlas = g_ptr_array_index (self->atlases, i);
-      char *filename = g_strdup_printf ("frame-%d-atlas-%d.png",
-                                        (int)self->current_frame_id,
-                                        atlas->texture_id);
-      write_atlas_to_png (atlas, filename);
-    }
-#endif
-
   gsk_gl_command_queue_end_frame (self->command_queue);
 
   gsk_gl_texture_library_end_frame (GSK_GL_TEXTURE_LIBRARY (self->icons));
@@ -1016,4 +1004,26 @@ gsk_next_driver_lookup_shader (GskNextDriver  *self,
     }
 
   return g_steal_pointer (&program);
+}
+
+void
+gsk_next_driver_save_atlases_to_png (GskNextDriver *self,
+                                     const char    *directory)
+{
+  g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
+
+  if (directory == NULL)
+    directory = ".";
+
+  for (guint i = 0; i < self->atlases->len; i++)
+    {
+      GskGLTextureAtlas *atlas = g_ptr_array_index (self->atlases, i);
+      char *filename = g_strdup_printf ("%s%sframe-%d-atlas-%d.png",
+                                        directory,
+                                        G_DIR_SEPARATOR_S,
+                                        (int)self->current_frame_id,
+                                        atlas->texture_id);
+      write_atlas_to_png (atlas, filename);
+      g_free (filename);
+    }
 }

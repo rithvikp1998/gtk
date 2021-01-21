@@ -156,6 +156,8 @@ GskGLProgram      *gsk_next_driver_lookup_shader         (GskNextDriver        *
                                                           GskGLShader          *shader,
                                                           GError              **error);
 GskGLTextureAtlas *gsk_next_driver_create_atlas          (GskNextDriver        *self);
+void              gsk_next_driver_save_atlases_to_png    (GskNextDriver        *self,
+                                                          const char           *directory);
 
 G_END_DECLS
 
