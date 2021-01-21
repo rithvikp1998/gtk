@@ -296,11 +296,3 @@ gsk_gl_texture_library_pack (GskGLTextureLibrary *self,
 
   return entry;
 }
-
-void
-gsk_gl_texture_library_upload (GskGLTextureLibrary   *self,
-                               GskGLTextureAtlas     *atlas,
-                               const graphene_rect_t *area,
-                               GdkTexture            *texture)
-{
-}

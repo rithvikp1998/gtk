@@ -117,10 +117,6 @@ gpointer gsk_gl_texture_library_pack        (GskGLTextureLibrary    *self,
                                              gsize                   valuelen,
                                              guint                   width,
                                              guint                   height);
-void     gsk_gl_texture_library_upload      (GskGLTextureLibrary    *self,
-                                             GskGLTextureAtlas      *atlas,
-                                             const graphene_rect_t  *area,
-                                             GdkTexture             *texture);
 
 static inline void
 gsk_gl_texture_atlas_mark_unused (GskGLTextureAtlas *self,
