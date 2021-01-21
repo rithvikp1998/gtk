@@ -115,7 +115,10 @@ GdkGLContext      *gsk_gl_command_queue_get_context          (GskGLCommandQueue 
 void               gsk_gl_command_queue_make_current         (GskGLCommandQueue        *self);
 void               gsk_gl_command_queue_begin_frame          (GskGLCommandQueue        *self);
 void               gsk_gl_command_queue_end_frame            (GskGLCommandQueue        *self);
-void               gsk_gl_command_queue_execute              (GskGLCommandQueue        *self);
+void               gsk_gl_command_queue_execute              (GskGLCommandQueue        *self,
+                                                              guint                     surface_height,
+                                                              guint                     scale_factor,
+                                                              const cairo_region_t     *scissor);
 int                gsk_gl_command_queue_upload_texture       (GskGLCommandQueue        *self,
                                                               GdkTexture               *texture,
                                                               guint                     x_offset,

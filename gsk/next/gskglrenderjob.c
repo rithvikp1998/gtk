@@ -3455,12 +3455,14 @@ gsk_gl_render_job_render_flipped (GskGLRenderJob *job,
   GdkGLContext *context;
   guint framebuffer_id;
   guint texture_id;
+  guint surface_height;
 
   g_return_if_fail (job != NULL);
   g_return_if_fail (root != NULL);
   g_return_if_fail (GSK_IS_NEXT_DRIVER (job->driver));
 
   context = gsk_next_driver_get_context (job->driver);
+  surface_height = job->viewport.size.height;
 
   gdk_gl_context_make_current (context);
 
@@ -3509,7 +3511,7 @@ gsk_gl_render_job_render_flipped (GskGLRenderJob *job,
   gsk_gl_program_end_draw (job->driver->blit);
 
   gdk_gl_context_push_debug_group (context, "Executing command queue");
-  gsk_gl_command_queue_execute (job->command_queue);
+  gsk_gl_command_queue_execute (job->command_queue, surface_height, 1, NULL);
   gdk_gl_context_pop_debug_group (context);
 
   gsk_next_driver_end_frame (job->driver);
@@ -3525,12 +3527,16 @@ gsk_gl_render_job_render (GskGLRenderJob *job,
                           GskRenderNode  *root)
 {
   GdkGLContext *context;
+  guint scale_factor;
+  guint surface_height;
 
   g_return_if_fail (job != NULL);
   g_return_if_fail (root != NULL);
   g_return_if_fail (GSK_IS_NEXT_DRIVER (job->driver));
 
   context = gsk_next_driver_get_context (job->driver);
+  scale_factor = MAX (job->scale_x, job->scale_y);
+  surface_height = job->viewport.size.height;
 
   gsk_next_driver_begin_frame (job->driver);
 
@@ -3551,7 +3557,7 @@ gsk_gl_render_job_render (GskGLRenderJob *job,
 #endif
 
   gdk_gl_context_push_debug_group (context, "Executing command queue");
-  gsk_gl_command_queue_execute (job->command_queue);
+  gsk_gl_command_queue_execute (job->command_queue, surface_height, scale_factor, job->region);
   gdk_gl_context_pop_debug_group (context);
 
   gsk_next_driver_end_frame (job->driver);
@@ -3592,7 +3598,6 @@ gsk_gl_render_job_new (GskNextDriver         *driver,
   job->scale_x = scale_factor;
   job->scale_y = scale_factor;
   job->viewport = *viewport;
-  job->region = region ? cairo_region_copy (region) : NULL;
   job->alpha = 1.0;
 
   init_projection_matrix (&job->projection, viewport);
@@ -3615,6 +3620,7 @@ gsk_gl_render_job_new (GskNextDriver         *driver,
                                                                extents.height),
                                           &transformed_extents);
       clip_rect = &transformed_extents;
+      job->region = cairo_region_create_rectangle (&extents);
     }
 
   gsk_gl_render_job_push_clip (job,
