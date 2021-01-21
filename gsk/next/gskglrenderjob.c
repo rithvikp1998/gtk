@@ -1379,14 +1379,13 @@ gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
       if (rounded_inner_rect_contains_rect (&transformed_clip, &current_clip.bounds))
         {
           gsk_gl_render_job_visit_node (job, child);
+          return;
         }
-      else
-        {
-          /* TODO: Intersect current and new clip */
-          gsk_gl_render_job_push_clip (job, &transformed_clip);
-          gsk_gl_render_job_visit_node (job, child);
-          gsk_gl_render_job_pop_clip (job);
-        }
+
+      /* TODO: Intersect current and new clip */
+      gsk_gl_render_job_push_clip (job, &transformed_clip);
+      gsk_gl_render_job_visit_node (job, child);
+      gsk_gl_render_job_pop_clip (job);
     }
   else
     {
