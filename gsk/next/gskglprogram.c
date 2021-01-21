@@ -138,6 +138,11 @@ gsk_gl_program_add_uniform (GskGLProgram *self,
   else if (key == UNIFORM_SHARED_ALPHA)
     self->alpha_location = location;
 
+#if 0
+  g_print ("program [%d] %s uniform %s at location %d.\n",
+           self->id, self->name, name, location);
+#endif
+
   return TRUE;
 }
 
