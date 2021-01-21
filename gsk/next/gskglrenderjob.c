@@ -3016,9 +3016,8 @@ gsk_gl_render_job_upload_texture (GskGLRenderJob       *job,
       !GDK_IS_GL_TEXTURE (texture))
     {
       const GskGLIconData *icon_data;
-      gsk_gl_icon_library_lookup_or_add (job->driver->icons,
-                                         texture,
-                                         &icon_data);
+
+      gsk_gl_icon_library_lookup_or_add (job->driver->icons, texture, &icon_data);
       offscreen->texture_id = GSK_GL_TEXTURE_ATLAS_ENTRY_TEXTURE (icon_data);
       offscreen->area = icon_data->entry.area;
     }
@@ -3323,14 +3322,8 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
       offscreen->force_offscreen == FALSE)
     {
       GdkTexture *texture = gsk_texture_node_get_texture (node);
-
-      init_full_texture_region (&offscreen->area);
-      offscreen->was_offscreen = FALSE;
-      offscreen->texture_id = gsk_next_driver_load_texture (job->driver,
-                                                            texture,
-                                                            GL_LINEAR,
-                                                            GL_LINEAR);
-
+      gsk_gl_render_job_upload_texture (job, texture, offscreen);
+      g_assert (offscreen->was_offscreen == FALSE);
       return TRUE;
     }
 
