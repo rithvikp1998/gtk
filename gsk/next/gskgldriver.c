@@ -77,6 +77,14 @@ gsk_gl_texture_free (gpointer data)
 
   if (texture != NULL)
     {
+      if (texture->user)
+        gdk_texture_clear_render_data (texture->user);
+
+      if (texture->texture_id != 0)
+        glDeleteTextures (1, &texture->texture_id);
+
+      /* TODO: Clear slices */
+
       g_slice_free (GskGLTexture, texture);
     }
 }
