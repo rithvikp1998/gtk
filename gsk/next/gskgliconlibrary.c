@@ -72,6 +72,7 @@ gsk_gl_icon_library_add (GskGLIconLibrary     *self,
                          GdkTexture           *key,
                          const GskGLIconData **out_value)
 {
+  GskGLTextureAtlas *atlas;
   cairo_surface_t *surface;
   GskGLIconData *icon_data;
   guint8 *pixel_data;
@@ -98,6 +99,19 @@ gsk_gl_icon_library_add (GskGLIconLibrary     *self,
                                            width + 2,
                                            height + 2);
   icon_data->source_texture = g_object_ref (key);
+
+  atlas = icon_data->entry.is_atlased ? icon_data->entry.atlas : NULL;
+
+  if G_LIKELY (atlas != NULL)
+    {
+      packed_x = atlas->width * icon_data->entry.area.origin.x;
+      packed_y = atlas->width * icon_data->entry.area.origin.y;
+    }
+  else
+    {
+      packed_x = 0;
+      packed_y = 0;
+    }
 
   /* actually upload the texture */
   surface = gdk_texture_download_surface (key);
