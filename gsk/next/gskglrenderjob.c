@@ -3042,6 +3042,9 @@ gsk_gl_render_job_visit_texture_node (GskGLRenderJob *job,
 
       gsk_gl_render_job_upload_texture (job, texture, &offscreen);
 
+      g_assert (offscreen.texture_id);
+      g_assert (offscreen.was_offscreen == FALSE);
+
       gsk_gl_program_begin_draw (job->driver->blit,
                                  &job->viewport,
                                  &job->projection,
