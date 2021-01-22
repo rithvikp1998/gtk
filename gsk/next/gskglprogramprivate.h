@@ -24,6 +24,7 @@
 #include "gskgltypesprivate.h"
 
 #include "gskglcommandqueueprivate.h"
+#include "gskgldriverprivate.h"
 
 G_BEGIN_DECLS
 
@@ -38,7 +39,7 @@ struct _GskGLProgram
   int id;
   char *name;
   GArray *uniform_locations;
-  GskGLCommandQueue *command_queue;
+  GskNextDriver *driver;
 
   /* Cached shared locations */
   int projection_location;
@@ -53,7 +54,7 @@ struct _GskGLProgram
   int size_location;
 };
 
-GskGLProgram *gsk_gl_program_new         (GskGLCommandQueue       *command_queue,
+GskGLProgram *gsk_gl_program_new         (GskNextDriver           *driver,
                                           const char              *name,
                                           int                      program_id);
 gboolean      gsk_gl_program_add_uniform (GskGLProgram            *self,
@@ -84,7 +85,7 @@ gsk_gl_program_set_uniform1fv (GskGLProgram *self,
                                guint         count,
                                const float  *values)
 {
-  gsk_gl_command_queue_set_uniform1fv (self->command_queue, self->id,
+  gsk_gl_command_queue_set_uniform1fv (self->driver->command_queue, self->id,
                                        gsk_gl_program_get_uniform_location (self, key),
                                        count, values);
 }
@@ -95,7 +96,7 @@ gsk_gl_program_set_uniform4fv (GskGLProgram *self,
                                guint         count,
                                const float  *values)
 {
-  gsk_gl_command_queue_set_uniform4fv (self->command_queue, self->id,
+  gsk_gl_command_queue_set_uniform4fv (self->driver->command_queue, self->id,
                                        gsk_gl_program_get_uniform_location (self, key),
                                        count, values);
 }
@@ -105,7 +106,7 @@ gsk_gl_program_set_uniform_rounded_rect (GskGLProgram         *self,
                                          guint                 key,
                                          const GskRoundedRect *rounded_rect)
 {
-  gsk_gl_command_queue_set_uniform_rounded_rect (self->command_queue, self->id,
+  gsk_gl_command_queue_set_uniform_rounded_rect (self->driver->command_queue, self->id,
                                                  gsk_gl_program_get_uniform_location (self, key),
                                                  rounded_rect);
 }
@@ -115,7 +116,7 @@ gsk_gl_program_set_uniform1i (GskGLProgram *self,
                               guint         key,
                               int           value0)
 {
-  gsk_gl_command_queue_set_uniform1i (self->command_queue,
+  gsk_gl_command_queue_set_uniform1i (self->driver->command_queue,
                                       self->id,
                                       gsk_gl_program_get_uniform_location (self, key),
                                       value0);
@@ -127,7 +128,7 @@ gsk_gl_program_set_uniform2i (GskGLProgram *self,
                               int           value0,
                               int           value1)
 {
-  gsk_gl_command_queue_set_uniform2i (self->command_queue,
+  gsk_gl_command_queue_set_uniform2i (self->driver->command_queue,
                                       self->id,
                                       gsk_gl_program_get_uniform_location (self, key),
                                       value0,
@@ -141,7 +142,7 @@ gsk_gl_program_set_uniform3i (GskGLProgram *self,
                               int           value1,
                               int           value2)
 {
-  gsk_gl_command_queue_set_uniform3i (self->command_queue,
+  gsk_gl_command_queue_set_uniform3i (self->driver->command_queue,
                                       self->id,
                                       gsk_gl_program_get_uniform_location (self, key),
                                       value0,
@@ -157,7 +158,7 @@ gsk_gl_program_set_uniform4i (GskGLProgram *self,
                               int           value2,
                               int           value3)
 {
-  gsk_gl_command_queue_set_uniform4i (self->command_queue,
+  gsk_gl_command_queue_set_uniform4i (self->driver->command_queue,
                                       self->id,
                                       gsk_gl_program_get_uniform_location (self, key),
                                       value0,
@@ -171,7 +172,7 @@ gsk_gl_program_set_uniform1f (GskGLProgram *self,
                               guint         key,
                               float         value0)
 {
-  gsk_gl_command_queue_set_uniform1f (self->command_queue,
+  gsk_gl_command_queue_set_uniform1f (self->driver->command_queue,
                                       self->id,
                                       gsk_gl_program_get_uniform_location (self, key),
                                       value0);
@@ -183,7 +184,7 @@ gsk_gl_program_set_uniform2f (GskGLProgram *self,
                               float         value0,
                               float         value1)
 {
-  gsk_gl_command_queue_set_uniform2f (self->command_queue,
+  gsk_gl_command_queue_set_uniform2f (self->driver->command_queue,
                                       self->id,
                                       gsk_gl_program_get_uniform_location (self, key),
                                       value0,
@@ -197,7 +198,7 @@ gsk_gl_program_set_uniform3f (GskGLProgram *self,
                               float         value1,
                               float         value2)
 {
-  gsk_gl_command_queue_set_uniform3f (self->command_queue,
+  gsk_gl_command_queue_set_uniform3f (self->driver->command_queue,
                                       self->id,
                                       gsk_gl_program_get_uniform_location (self, key),
                                       value0,
@@ -213,7 +214,7 @@ gsk_gl_program_set_uniform4f (GskGLProgram *self,
                               float         value2,
                               float         value3)
 {
-  gsk_gl_command_queue_set_uniform4f (self->command_queue,
+  gsk_gl_command_queue_set_uniform4f (self->driver->command_queue,
                                       self->id,
                                       gsk_gl_program_get_uniform_location (self, key),
                                       value0,
@@ -227,7 +228,7 @@ gsk_gl_program_set_uniform_color (GskGLProgram  *self,
                                   guint          key,
                                   const GdkRGBA *color)
 {
-  gsk_gl_command_queue_set_uniform_color (self->command_queue,
+  gsk_gl_command_queue_set_uniform_color (self->driver->command_queue,
                                           self->id,
                                           gsk_gl_program_get_uniform_location (self, key),
                                           color);
@@ -240,7 +241,7 @@ gsk_gl_program_set_uniform_texture (GskGLProgram *self,
                                     GLenum        texture_slot,
                                     guint         texture_id)
 {
-  gsk_gl_command_queue_set_uniform_texture (self->command_queue,
+  gsk_gl_command_queue_set_uniform_texture (self->driver->command_queue,
                                             self->id,
                                             gsk_gl_program_get_uniform_location (self, key),
                                             texture_target,
@@ -253,7 +254,7 @@ gsk_gl_program_set_uniform_matrix (GskGLProgram            *self,
                                    guint                    key,
                                    const graphene_matrix_t *matrix)
 {
-  gsk_gl_command_queue_set_uniform_matrix (self->command_queue,
+  gsk_gl_command_queue_set_uniform_matrix (self->driver->command_queue,
                                            self->id,
                                            gsk_gl_program_get_uniform_location (self, key),
                                            matrix);

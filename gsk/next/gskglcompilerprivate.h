@@ -36,7 +36,7 @@ typedef enum _GskGLCompilerKind
 
 G_DECLARE_FINAL_TYPE (GskGLCompiler, gsk_gl_compiler, GSK, GL_COMPILER, GObject)
 
-GskGLCompiler *gsk_gl_compiler_new                        (GskGLCommandQueue  *command_queue,
+GskGLCompiler *gsk_gl_compiler_new                        (GskNextDriver      *driver,
                                                            gboolean            debug);
 void           gsk_gl_compiler_set_preamble               (GskGLCompiler      *self,
                                                            GskGLCompilerKind   kind,

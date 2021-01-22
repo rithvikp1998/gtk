@@ -87,6 +87,8 @@ typedef enum _GskGLUniformKind
 } GskGLUniformFormat;
 
 GskGLUniformState *gsk_gl_uniform_state_new              (void);
+GskGLUniformState *gsk_gl_uniform_state_ref              (GskGLUniformState         *state);
+void               gsk_gl_uniform_state_unref            (GskGLUniformState         *state);
 void               gsk_gl_uniform_state_clear_program    (GskGLUniformState         *state,
                                                           guint                      program);
 void               gsk_gl_uniform_state_end_frame        (GskGLUniformState         *state);
@@ -178,7 +180,6 @@ void               gsk_gl_uniform_state_snapshot         (GskGLUniformState     
                                                           guint                      program_id,
                                                           GskGLUniformStateCallback  callback,
                                                           gpointer                   user_data);
-void               gsk_gl_uniform_state_free             (GskGLUniformState         *state);
 
 static inline gconstpointer
 gsk_gl_uniform_state_get_uniform_data (GskGLUniformState *state,

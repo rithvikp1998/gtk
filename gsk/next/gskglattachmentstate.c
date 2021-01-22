@@ -27,7 +27,7 @@ gsk_gl_attachment_state_new (void)
 {
   GskGLAttachmentState *self;
 
-  self = g_new0 (GskGLAttachmentState, 1);
+  self = g_atomic_rc_box_new0 (GskGLAttachmentState);
 
   self->fbo.changed = FALSE;
   self->fbo.id = 0;
@@ -48,10 +48,16 @@ gsk_gl_attachment_state_new (void)
   return self;
 }
 
-void
-gsk_gl_attachment_state_free (GskGLAttachmentState *self)
+GskGLAttachmentState *
+gsk_gl_attachment_state_ref (GskGLAttachmentState *self)
 {
-  g_free (self);
+  return g_atomic_rc_box_acquire (self);
+}
+
+void
+gsk_gl_attachment_state_unref (GskGLAttachmentState *self)
+{
+  g_atomic_rc_box_release (self);
 }
 
 void
@@ -104,7 +110,7 @@ gsk_gl_attachment_state_bind_framebuffer (GskGLAttachmentState *self,
  * This can be used to restore state later, such as after running
  * various GL commands that are external to the GL renderer.
  *
- * This must be freed by calling either gsk_gl_attachment_state_free()
+ * This must be freed by calling either gsk_gl_attachment_state_unref()
  * or gsk_gl_attachment_state_restore().
  *
  * Returns: (transfer full): a new #GskGLAttachmentState or %NULL

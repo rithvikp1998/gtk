@@ -86,19 +86,32 @@ gsk_gl_uniform_state_new (void)
 {
   GskGLUniformState *state;
 
-  state = g_new0 (GskGLUniformState, 1);
+  state = g_atomic_rc_box_new0 (GskGLUniformState);
   state->program_info = g_array_new (FALSE, TRUE, sizeof (ProgramInfo));
   state->uniform_data = g_byte_array_new ();
 
   return g_steal_pointer (&state);
 }
 
-void
-gsk_gl_uniform_state_free (GskGLUniformState *state)
+GskGLUniformState *
+gsk_gl_uniform_state_ref (GskGLUniformState *state)
 {
+  return g_atomic_rc_box_acquire (state);
+}
+
+static void
+gsk_gl_uniform_state_finalize (gpointer data)
+{
+  GskGLUniformState *state = data;
+
   g_clear_pointer (&state->program_info, g_array_unref);
   g_clear_pointer (&state->uniform_data, g_byte_array_unref);
-  g_free (state);
+}
+
+void
+gsk_gl_uniform_state_unref (GskGLUniformState *state)
+{
+  g_atomic_rc_box_release_full (state, gsk_gl_uniform_state_finalize);
 }
 
 static inline void

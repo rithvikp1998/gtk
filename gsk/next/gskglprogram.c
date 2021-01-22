@@ -21,25 +21,25 @@
 #include "config.h"
 
 #include "gskglcommandqueueprivate.h"
-#include "gskgldriverprivate.h"
 #include "gskglprogramprivate.h"
 #include "gskgluniformstateprivate.h"
 
 G_DEFINE_TYPE (GskGLProgram, gsk_gl_program, G_TYPE_OBJECT)
 
 GskGLProgram *
-gsk_gl_program_new (GskGLCommandQueue *command_queue,
-                    const char        *name,
-                    int                program_id)
+gsk_gl_program_new (GskNextDriver *driver,
+                    const char    *name,
+                    int            program_id)
 {
   GskGLProgram *self;
 
+  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (driver), NULL);
   g_return_val_if_fail (program_id >= -1, NULL);
 
   self = g_object_new (GSK_TYPE_GL_PROGRAM, NULL);
   self->id = program_id;
   self->name = g_strdup (name);
-  self->command_queue = g_object_ref (command_queue);
+  self->driver = g_object_ref (driver);
 
   return self;
 }
@@ -56,7 +56,7 @@ gsk_gl_program_finalize (GObject *object)
 
   g_clear_pointer (&self->name, g_free);
   g_clear_pointer (&self->uniform_locations, g_array_unref);
-  g_clear_object (&self->command_queue);
+  g_clear_object (&self->driver);
 
   G_OBJECT_CLASS (gsk_gl_program_parent_class)->finalize (object);
 }
@@ -159,9 +159,9 @@ void
 gsk_gl_program_delete (GskGLProgram *self)
 {
   g_return_if_fail (GSK_IS_GL_PROGRAM (self));
-  g_return_if_fail (self->command_queue != NULL);
+  g_return_if_fail (self->driver->command_queue != NULL);
 
-  gsk_gl_command_queue_delete_program (self->command_queue, self->id);
+  gsk_gl_command_queue_delete_program (self->driver->command_queue, self->id);
   self->id = -1;
 }
 
@@ -180,7 +180,7 @@ gsk_gl_program_begin_draw (GskGLProgram            *self,
   g_assert (clip != NULL);
 
   if (self->viewport_location > -1)
-    gsk_gl_command_queue_set_uniform4f (self->command_queue,
+    gsk_gl_command_queue_set_uniform4f (self->driver->command_queue,
                                         self->id,
                                         self->viewport_location,
                                         viewport->origin.x,
@@ -189,13 +189,13 @@ gsk_gl_program_begin_draw (GskGLProgram            *self,
                                         viewport->size.height);
 
   if (self->modelview_location > -1)
-    gsk_gl_command_queue_set_uniform_matrix (self->command_queue,
+    gsk_gl_command_queue_set_uniform_matrix (self->driver->command_queue,
                                              self->id,
                                              self->modelview_location,
                                              modelview);
 
   if (self->projection_location > -1)
-    gsk_gl_command_queue_set_uniform_matrix (self->command_queue,
+    gsk_gl_command_queue_set_uniform_matrix (self->driver->command_queue,
                                              self->id,
                                              self->projection_location,
                                              projection);
@@ -203,12 +203,12 @@ gsk_gl_program_begin_draw (GskGLProgram            *self,
   if (self->clip_rect_location > -1)
     {
       if (clip != NULL)
-        gsk_gl_command_queue_set_uniform_rounded_rect (self->command_queue,
+        gsk_gl_command_queue_set_uniform_rounded_rect (self->driver->command_queue,
                                                        self->id,
                                                        self->clip_rect_location,
                                                        clip);
       else
-        gsk_gl_command_queue_set_uniform_rounded_rect (self->command_queue,
+        gsk_gl_command_queue_set_uniform_rounded_rect (self->driver->command_queue,
                                                        self->id,
                                                        self->clip_rect_location,
                                                        &GSK_ROUNDED_RECT_INIT (0,
@@ -218,12 +218,12 @@ gsk_gl_program_begin_draw (GskGLProgram            *self,
     }
 
   if (self->alpha_location > -1)
-    gsk_gl_command_queue_set_uniform1f (self->command_queue,
+    gsk_gl_command_queue_set_uniform1f (self->driver->command_queue,
                                         self->id,
                                         self->alpha_location,
                                         alpha);
 
-  gsk_gl_command_queue_begin_draw (self->command_queue, self->id, viewport);
+  gsk_gl_command_queue_begin_draw (self->driver->command_queue, self->id, viewport);
 }
 
 void
@@ -231,5 +231,5 @@ gsk_gl_program_end_draw (GskGLProgram *self)
 {
   g_assert (GSK_IS_GL_PROGRAM (self));
 
-  gsk_gl_command_queue_end_draw (self->command_queue);
+  gsk_gl_command_queue_end_draw (self->driver->command_queue);
 }

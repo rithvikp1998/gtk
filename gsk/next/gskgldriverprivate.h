@@ -83,6 +83,7 @@ struct _GskNextDriver
 {
   GObject parent_instance;
 
+  GskGLCommandQueue *shared_command_queue;
   GskGLCommandQueue *command_queue;
 
   GskGLTexturePool texture_pool;
@@ -119,6 +120,8 @@ struct _GskNextDriver
 GskNextDriver     *gsk_next_driver_from_shared_context   (GdkGLContext         *context,
                                                           gboolean              debug_shaders,
                                                           GError              **error);
+GskGLCommandQueue *gsk_next_driver_create_command_queue  (GskNextDriver        *self,
+                                                          GdkGLContext         *context);
 GdkGLContext      *gsk_next_driver_get_context           (GskNextDriver        *self);
 gboolean           gsk_next_driver_create_render_target  (GskNextDriver        *self,
                                                           int                   width,
@@ -129,7 +132,8 @@ gboolean           gsk_next_driver_create_render_target  (GskNextDriver        *
 guint              gsk_next_driver_release_render_target (GskNextDriver        *self,
                                                           GskGLRenderTarget    *render_target,
                                                           gboolean              release_texture);
-void               gsk_next_driver_begin_frame           (GskNextDriver        *self);
+void               gsk_next_driver_begin_frame           (GskNextDriver        *self,
+                                                          GskGLCommandQueue    *command_queue);
 void               gsk_next_driver_end_frame             (GskNextDriver        *self);
 guint              gsk_next_driver_lookup_texture        (GskNextDriver        *self,
                                                           const GskTextureKey  *key);

@@ -279,6 +279,9 @@ gsk_next_driver_dispose (GObject *object)
   g_clear_pointer (&self->render_targets, g_ptr_array_unref);
   g_clear_pointer (&self->shader_cache, g_hash_table_unref);
 
+  g_clear_object (&self->command_queue);
+  g_clear_object (&self->shared_command_queue);
+
   G_OBJECT_CLASS (gsk_next_driver_parent_class)->dispose (object);
 }
 
@@ -319,7 +322,7 @@ gsk_next_driver_load_programs (GskNextDriver  *self,
   g_assert (GSK_IS_NEXT_DRIVER (self));
   g_assert (GSK_IS_GL_COMMAND_QUEUE (self->command_queue));
 
-  compiler = gsk_gl_compiler_new (self->command_queue, self->debug);
+  compiler = gsk_gl_compiler_new (self, self->debug);
 
   /* Setup preambles that are shared by all shaders */
   gsk_gl_compiler_set_preamble_from_resource (compiler,
@@ -409,6 +412,7 @@ gsk_next_driver_new (GskGLCommandQueue  *command_queue,
 
   self = g_object_new (GSK_TYPE_NEXT_DRIVER, NULL);
   self->command_queue = g_object_ref (command_queue);
+  self->shared_command_queue = g_object_ref (command_queue);
   self->debug = !!debug_shaders;
 
   if (!gsk_next_driver_load_programs (self, error))
@@ -451,7 +455,13 @@ gsk_next_driver_from_shared_context (GdkGLContext  *context,
 
   gdk_gl_context_make_current (context);
 
-  command_queue = gsk_gl_command_queue_new (context);
+  /* Initially we create a command queue using the shared context. However,
+   * as frames are processed this will be replaced with the command queue
+   * for a given renderer. But since the programs are compiled into the
+   * shared context, all other contexts sharing with it will have access
+   * to those programs.
+   */
+  command_queue = gsk_gl_command_queue_new (context, NULL, NULL);
 
   if (!(driver = gsk_next_driver_new (command_queue, debug_shaders, error)))
     goto failure;
@@ -470,20 +480,26 @@ failure:
 /**
  * gsk_next_driver_begin_frame:
  * @self: a #GskNextDriver
+ * @command_queue: A #GskGLCommandQueue from the renderer
  *
  * Begin a new frame.
  *
- * Texture atlases, pools, and other resources will be prepared to
- * draw the next frame.
+ * Texture atlases, pools, and other resources will be prepared to draw the
+ * next frame. The command queue should be one that was created for the
+ * target context to be drawn into (the context of the renderer's surface).
  */
 void
-gsk_next_driver_begin_frame (GskNextDriver *self)
+gsk_next_driver_begin_frame (GskNextDriver     *self,
+                             GskGLCommandQueue *command_queue)
 {
   g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
+  g_return_if_fail (GSK_IS_GL_COMMAND_QUEUE (command_queue));
   g_return_if_fail (self->in_frame == FALSE);
 
   self->in_frame = TRUE;
   self->current_frame_id++;
+
+  g_set_object (&self->command_queue, command_queue);
 
   gsk_gl_command_queue_make_current (self->command_queue);
   gsk_gl_command_queue_begin_frame (self->command_queue);
@@ -543,6 +559,12 @@ gsk_next_driver_end_frame (GskNextDriver *self)
   gsk_gl_texture_pool_clear (&self->texture_pool);
 
   self->in_frame = FALSE;
+
+  /* Reset command queue to our shared queue incase we have operations
+   * that need to be processed outside of a frame (such as callbacks
+   * from external systems such as GDK).
+   */
+  g_set_object (&self->command_queue, self->shared_command_queue);
 }
 
 GdkGLContext *
@@ -1005,7 +1027,7 @@ gsk_next_driver_lookup_shader (GskNextDriver  *self,
           return NULL;
         }
 
-      compiler = gsk_gl_compiler_new (self->command_queue, FALSE);
+      compiler = gsk_gl_compiler_new (self, FALSE);
       suffix = gsk_gl_shader_get_source (shader);
 
       gsk_gl_compiler_set_preamble_from_resource (compiler,
@@ -1083,4 +1105,16 @@ gsk_next_driver_save_atlases_to_png (GskNextDriver *self,
       write_atlas_to_png (atlas, filename);
       g_free (filename);
     }
+}
+
+GskGLCommandQueue *
+gsk_next_driver_create_command_queue (GskNextDriver *self,
+                                      GdkGLContext  *context)
+{
+  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), NULL);
+  g_return_val_if_fail (GDK_IS_GL_CONTEXT (context), NULL);
+
+  return gsk_gl_command_queue_new (context,
+                                   self->shared_command_queue->uniforms,
+                                   self->shared_command_queue->attachments);
 }

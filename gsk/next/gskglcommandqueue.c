@@ -221,8 +221,8 @@ gsk_gl_command_queue_dispose (GObject *object)
 
   g_clear_object (&self->context);
   g_clear_pointer (&self->batches, g_array_unref);
-  g_clear_pointer (&self->attachments, gsk_gl_attachment_state_free);
-  g_clear_pointer (&self->uniforms, gsk_gl_uniform_state_free);
+  g_clear_pointer (&self->attachments, gsk_gl_attachment_state_unref);
+  g_clear_pointer (&self->uniforms, gsk_gl_uniform_state_unref);
   g_clear_pointer (&self->vertices, gsk_gl_buffer_free);
   g_clear_pointer (&self->batch_draws, g_array_unref);
   g_clear_pointer (&self->batch_binds, g_array_unref);
@@ -249,31 +249,38 @@ gsk_gl_command_queue_init (GskGLCommandQueue *self)
   self->batch_draws = g_array_new (FALSE, FALSE, sizeof (GskGLCommandDraw));
   self->batch_binds = g_array_new (FALSE, FALSE, sizeof (GskGLCommandBind));
   self->batch_uniforms = g_array_new (FALSE, FALSE, sizeof (GskGLCommandUniform));
-  self->attachments = gsk_gl_attachment_state_new ();
   self->vertices = gsk_gl_buffer_new (GL_ARRAY_BUFFER, sizeof (GskGLDrawVertex));
-  self->uniforms = gsk_gl_uniform_state_new ();
-  self->saved_state = g_ptr_array_new_with_free_func ((GDestroyNotify)gsk_gl_attachment_state_free);
+  self->saved_state = g_ptr_array_new_with_free_func ((GDestroyNotify)gsk_gl_attachment_state_unref);
   self->debug_groups = g_string_chunk_new (4096);
 }
 
 GskGLCommandQueue *
-gsk_gl_command_queue_new (GdkGLContext *context)
+gsk_gl_command_queue_new (GdkGLContext         *context,
+                          GskGLUniformState    *uniforms,
+                          GskGLAttachmentState *attachments)
 {
   GskGLCommandQueue *self;
-  GdkGLContext *previous_context;
 
   g_return_val_if_fail (GDK_IS_GL_CONTEXT (context), NULL);
 
   self = g_object_new (GSK_TYPE_GL_COMMAND_QUEUE, NULL);
   self->context = g_object_ref (context);
 
-  previous_context = gdk_gl_context_get_current ();
+  /* Use shared attachment state if we're provided one */
+  if (attachments != NULL)
+    self->attachments = gsk_gl_attachment_state_ref (attachments);
+  else
+    self->attachments = gsk_gl_attachment_state_new ();
 
+  /* Use shared uniform state if we're provided one */
+  if (uniforms != NULL)
+    self->uniforms = gsk_gl_uniform_state_ref (uniforms);
+  else
+    self->uniforms = gsk_gl_uniform_state_new ();
+
+  /* Determine max texture size immediately and restore context */
   gdk_gl_context_make_current (context);
   glGetIntegerv (GL_MAX_TEXTURE_SIZE, &self->max_texture_size);
-
-  if (previous_context != NULL)
-    gdk_gl_context_make_current (previous_context);
 
   return g_steal_pointer (&self);
 }

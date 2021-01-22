@@ -110,7 +110,9 @@ struct _GskGLCommandQueue
   guint in_draw : 1;
 };
 
-GskGLCommandQueue *gsk_gl_command_queue_new                  (GdkGLContext             *context);
+GskGLCommandQueue *gsk_gl_command_queue_new                  (GdkGLContext             *context,
+                                                              GskGLUniformState        *uniforms,
+                                                              GskGLAttachmentState     *attachments);
 GdkGLContext      *gsk_gl_command_queue_get_context          (GskGLCommandQueue        *self);
 void               gsk_gl_command_queue_make_current         (GskGLCommandQueue        *self);
 void               gsk_gl_command_queue_begin_frame          (GskGLCommandQueue        *self);

@@ -56,6 +56,8 @@ struct _GskGLAttachmentState
 };
 
 GskGLAttachmentState *gsk_gl_attachment_state_new              (void);
+GskGLAttachmentState *gsk_gl_attachment_state_ref              (GskGLAttachmentState *self);
+void                  gsk_gl_attachment_state_unref            (GskGLAttachmentState *self);
 GskGLAttachmentState *gsk_gl_attachment_state_save             (GskGLAttachmentState *self);
 void                  gsk_gl_attachment_state_restore          (GskGLAttachmentState *self);
 void                  gsk_gl_attachment_state_free             (GskGLAttachmentState *self);

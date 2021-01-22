@@ -45,6 +45,14 @@ struct _GskNextRenderer
    */
   GdkGLContext *context;
 
+  /* Our command queue is private to this renderer and talks to the GL
+   * context for our target surface. This ensure that framebuffer 0 matches
+   * the surface we care about. Since the context is shared with other
+   * contexts from other renderers on the display, texture atlases,
+   * programs, and other objects are available to them all.
+   */
+  GskGLCommandQueue *command_queue;
+
   /* The driver manages our program state and command queues. It also
    * deals with caching textures, shaders, shadows, glyph, and icon
    * caches through various helpers.
@@ -80,6 +88,7 @@ gsk_next_renderer_realize (GskRenderer  *renderer,
 
   g_assert (self->driver == NULL);
   g_assert (self->context == NULL);
+  g_assert (self->command_queue == NULL);
 
   if (!(context = gdk_surface_create_gl_context (surface, error)) ||
       !gdk_gl_context_realize (context, error))
@@ -102,6 +111,7 @@ gsk_next_renderer_realize (GskRenderer  *renderer,
   if (!(driver = gsk_next_driver_from_shared_context (shared_context, debug_shaders, error)))
     goto failure;
 
+  self->command_queue = gsk_next_driver_create_command_queue (driver, context);
   self->context = g_steal_pointer (&context);
   self->driver = g_steal_pointer (&driver);
 
@@ -122,6 +132,8 @@ gsk_next_renderer_unrealize (GskRenderer *renderer)
   g_assert (GSK_IS_NEXT_RENDERER (renderer));
 
   g_clear_object (&self->driver);
+  g_clear_object (&self->context);
+  g_clear_object (&self->command_queue);
 }
 
 typedef struct _GskGLTextureState
@@ -230,19 +242,18 @@ gsk_gl_renderer_render (GskRenderer          *renderer,
   gdk_gl_context_make_current (self->context);
   gdk_draw_context_begin_frame (GDK_DRAW_CONTEXT (self->context), update_area);
 
-  job = gsk_gl_render_job_new (self->driver, &viewport, scale_factor, render_region, self->context, 0);
-
+  gsk_next_driver_begin_frame (self->driver, self->command_queue);
+  job = gsk_gl_render_job_new (self->driver, &viewport, scale_factor, render_region, 0);
 #ifdef G_ENABLE_DEBUG
   if (GSK_RENDERER_DEBUG_CHECK (GSK_RENDERER (self), FALLBACK))
     gsk_gl_render_job_set_debug_fallback (job, TRUE);
 #endif
-
   gsk_gl_render_job_render (job, root);
+  gsk_next_driver_end_frame (self->driver);
+  gsk_gl_render_job_free (job);
 
   gdk_gl_context_make_current (self->context);
   gdk_draw_context_end_frame (GDK_DRAW_CONTEXT (self->context));
-
-  gsk_gl_render_job_free (job);
 
   cairo_region_destroy (render_region);
 }
@@ -255,7 +266,7 @@ gsk_gl_renderer_render_texture (GskRenderer           *renderer,
   GskNextRenderer *self = (GskNextRenderer *)renderer;
   GskGLRenderTarget *render_target;
   GskGLRenderJob *job;
-  GdkGLContext *context;
+  GdkTexture *texture;
   guint texture_id;
   int width;
   int height;
@@ -263,11 +274,8 @@ gsk_gl_renderer_render_texture (GskRenderer           *renderer,
   g_assert (GSK_IS_NEXT_RENDERER (renderer));
   g_assert (root != NULL);
 
-  context = gsk_gl_command_queue_get_context (self->driver->command_queue);
   width = ceilf (viewport->size.width);
   height = ceilf (viewport->size.height);
-
-  gdk_gl_context_make_current (context);
 
   if (!gsk_next_driver_create_render_target (self->driver,
                                              width, height,
@@ -275,13 +283,19 @@ gsk_gl_renderer_render_texture (GskRenderer           *renderer,
                                              &render_target))
     return NULL;
 
-  job = gsk_gl_render_job_new (self->driver, viewport, 1, NULL, context, render_target->framebuffer_id);
+  gsk_next_driver_begin_frame (self->driver, self->command_queue);
+  job = gsk_gl_render_job_new (self->driver, viewport, 1, NULL, render_target->framebuffer_id);
+#ifdef G_ENABLE_DEBUG
+  if (GSK_RENDERER_DEBUG_CHECK (GSK_RENDERER (self), FALLBACK))
+    gsk_gl_render_job_set_debug_fallback (job, TRUE);
+#endif
   gsk_gl_render_job_render_flipped (job, root);
+  texture_id = gsk_next_driver_release_render_target (self->driver, render_target, FALSE);
+  texture = create_texture_from_texture (self->context, texture_id, width, height);
+  gsk_next_driver_end_frame (self->driver);
   gsk_gl_render_job_free (job);
 
-  texture_id = gsk_next_driver_release_render_target (self->driver, render_target, FALSE);
-
-  return create_texture_from_texture (context, texture_id, width, height);
+  return g_steal_pointer (&texture);
 }
 
 static void

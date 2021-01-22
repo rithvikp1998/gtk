@@ -3502,7 +3502,6 @@ gsk_gl_render_job_render_flipped (GskGLRenderJob *job,
                                   GskRenderNode  *root)
 {
   graphene_matrix_t proj;
-  GdkGLContext *context;
   guint framebuffer_id;
   guint texture_id;
   guint surface_height;
@@ -3511,10 +3510,7 @@ gsk_gl_render_job_render_flipped (GskGLRenderJob *job,
   g_return_if_fail (root != NULL);
   g_return_if_fail (GSK_IS_NEXT_DRIVER (job->driver));
 
-  context = gsk_next_driver_get_context (job->driver);
   surface_height = job->viewport.size.height;
-
-  gdk_gl_context_make_current (context);
 
   graphene_matrix_init_ortho (&proj,
                               job->viewport.origin.x,
@@ -3532,16 +3528,14 @@ gsk_gl_render_job_render_flipped (GskGLRenderJob *job,
                                                   &framebuffer_id, &texture_id))
     return;
 
-  gsk_next_driver_begin_frame (job->driver);
-
   /* Setup drawing to our offscreen texture/framebuffer which is flipped */
   gsk_gl_command_queue_bind_framebuffer (job->command_queue, framebuffer_id);
   gsk_gl_command_queue_clear (job->command_queue, 0, &job->viewport);
 
   /* Visit all nodes creating batches */
-  gdk_gl_context_push_debug_group (context, "Building command queue");
+  gdk_gl_context_push_debug_group (job->command_queue->context, "Building command queue");
   gsk_gl_render_job_visit_node (job, root);
-  gdk_gl_context_pop_debug_group (context);
+  gdk_gl_context_pop_debug_group (job->command_queue->context);
 
   /* Now draw to our real destination, but flipped */
   gsk_gl_command_queue_bind_framebuffer (job->command_queue, job->framebuffer);
@@ -3560,13 +3554,9 @@ gsk_gl_render_job_render_flipped (GskGLRenderJob *job,
   gsk_gl_render_job_draw_rect (job, &job->viewport);
   gsk_gl_program_end_draw (job->driver->blit);
 
-  gdk_gl_context_push_debug_group (context, "Executing command queue");
+  gdk_gl_context_push_debug_group (job->command_queue->context, "Executing command queue");
   gsk_gl_command_queue_execute (job->command_queue, surface_height, 1, NULL);
-  gdk_gl_context_pop_debug_group (context);
-
-  gsk_next_driver_end_frame (job->driver);
-
-  gdk_gl_context_make_current (context);
+  gdk_gl_context_pop_debug_group (job->command_queue->context);
 
   glDeleteFramebuffers (1, &framebuffer_id);
   glDeleteTextures (1, &texture_id);
@@ -3576,7 +3566,6 @@ void
 gsk_gl_render_job_render (GskGLRenderJob *job,
                           GskRenderNode  *root)
 {
-  GdkGLContext *context;
   guint scale_factor;
   guint surface_height;
 
@@ -3584,22 +3573,18 @@ gsk_gl_render_job_render (GskGLRenderJob *job,
   g_return_if_fail (root != NULL);
   g_return_if_fail (GSK_IS_NEXT_DRIVER (job->driver));
 
-  context = gsk_gl_command_queue_get_context (job->command_queue);
   scale_factor = MAX (job->scale_x, job->scale_y);
   surface_height = job->viewport.size.height;
-
-  /* Do initial frame setup using shared GL context */
-  gsk_next_driver_begin_frame (job->driver);
 
   /* Build the command queue using the shared GL context for all renderers
    * on the same display.
    */
-  gdk_gl_context_push_debug_group (context, "Building command queue");
+  gdk_gl_context_push_debug_group (job->command_queue->context, "Building command queue");
   if (job->framebuffer != 0)
     gsk_gl_command_queue_bind_framebuffer (job->command_queue, job->framebuffer);
   gsk_gl_command_queue_clear (job->command_queue, 0, &job->viewport);
   gsk_gl_render_job_visit_node (job, root);
-  gdk_gl_context_pop_debug_group (context);
+  gdk_gl_context_pop_debug_group (job->command_queue->context);
 
 #if 0
   /* At this point the atlases have uploaded content while we processed
@@ -3612,13 +3597,10 @@ gsk_gl_render_job_render (GskGLRenderJob *job,
    * that was provided to us when creating the render job as framebuffer 0
    * is bound to that context.
    */
-  gdk_gl_context_make_current (job->context);
-  gdk_gl_context_push_debug_group (job->context, "Executing command queue");
+  gdk_gl_context_make_current (job->command_queue->context);
+  gdk_gl_context_push_debug_group (job->command_queue->context, "Executing command queue");
   gsk_gl_command_queue_execute (job->command_queue, surface_height, scale_factor, job->region);
-  gdk_gl_context_pop_debug_group (job->context);
-
-  /* Do frame cleanup using shared GL context */
-  gsk_next_driver_end_frame (job->driver);
+  gdk_gl_context_pop_debug_group (job->command_queue->context);
 }
 
 void
@@ -3635,7 +3617,6 @@ gsk_gl_render_job_new (GskNextDriver         *driver,
                        const graphene_rect_t *viewport,
                        float                  scale_factor,
                        const cairo_region_t  *region,
-                       GdkGLContext          *context,
                        guint                  framebuffer)
 {
   const graphene_rect_t *clip_rect = viewport;
@@ -3643,14 +3624,12 @@ gsk_gl_render_job_new (GskNextDriver         *driver,
   GskGLRenderJob *job;
 
   g_return_val_if_fail (GSK_IS_NEXT_DRIVER (driver), NULL);
-  g_return_val_if_fail (GDK_IS_GL_CONTEXT (context), NULL);
   g_return_val_if_fail (viewport != NULL, NULL);
   g_return_val_if_fail (scale_factor > 0, NULL);
 
   job = g_slice_new0 (GskGLRenderJob);
   job->driver = g_object_ref (driver);
-  job->command_queue = driver->command_queue;
-  job->context = g_object_ref (context);
+  job->command_queue = job->driver->command_queue;
   job->clip = g_array_new (FALSE, FALSE, sizeof (GskGLRenderClip));
   job->modelview = g_array_new (FALSE, FALSE, sizeof (GskGLRenderModelview));
   job->framebuffer = framebuffer;
@@ -3704,7 +3683,6 @@ gsk_gl_render_job_free (GskGLRenderJob *job)
     }
 
   g_clear_object (&job->driver);
-  g_clear_object (&job->context);
   g_clear_pointer (&job->region, cairo_region_destroy);
   g_clear_pointer (&job->modelview, g_array_unref);
   g_clear_pointer (&job->clip, g_array_unref);

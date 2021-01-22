@@ -38,7 +38,7 @@ struct _GskGLCompiler
 {
   GObject parent_instance;
 
-  GskGLCommandQueue *command_queue;
+  GskNextDriver *driver;
 
   GBytes *all_preamble;
   GBytes *fragment_preamble;
@@ -81,7 +81,7 @@ gsk_gl_compiler_finalize (GObject *object)
   g_clear_pointer (&self->fragment_suffix, g_bytes_unref);
   g_clear_pointer (&self->vertex_source, g_bytes_unref);
   g_clear_pointer (&self->attrib_locations, g_array_unref);
-  g_clear_object (&self->command_queue);
+  g_clear_object (&self->driver);
 
   G_OBJECT_CLASS (gsk_gl_compiler_parent_class)->finalize (object);
 }
@@ -111,19 +111,20 @@ gsk_gl_compiler_init (GskGLCompiler *self)
 }
 
 GskGLCompiler *
-gsk_gl_compiler_new (GskGLCommandQueue *command_queue,
-                     gboolean           debug_shaders)
+gsk_gl_compiler_new (GskNextDriver *driver,
+                     gboolean       debug_shaders)
 {
   GskGLCompiler *self;
   GdkGLContext *context;
 
-  g_return_val_if_fail (GSK_IS_GL_COMMAND_QUEUE (command_queue), NULL);
+  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (driver), NULL);
+  g_return_val_if_fail (driver->shared_command_queue != NULL, NULL);
 
   self = g_object_new (GSK_TYPE_GL_COMPILER, NULL);
-  self->command_queue = g_object_ref (command_queue);
+  self->driver = g_object_ref (driver);
   self->debug_shaders = !!debug_shaders;
 
-  context = gsk_gl_command_queue_get_context (command_queue);
+  context = gsk_gl_command_queue_get_context (self->driver->shared_command_queue);
 
   if (gdk_gl_context_get_use_es (context))
     {
@@ -149,7 +150,7 @@ gsk_gl_compiler_new (GskGLCommandQueue *command_queue,
       self->gl3 = TRUE;
     }
 
-  gsk_gl_command_queue_make_current (command_queue);
+  gsk_gl_command_queue_make_current (self->driver->shared_command_queue);
 
   return g_steal_pointer (&self);
 }
@@ -541,9 +542,9 @@ gsk_gl_compiler_compile (GskGLCompiler  *self,
   g_return_val_if_fail (self->vertex_preamble != NULL, NULL);
   g_return_val_if_fail (self->fragment_source != NULL, NULL);
   g_return_val_if_fail (self->vertex_source != NULL, NULL);
-  g_return_val_if_fail (self->command_queue != NULL, NULL);
+  g_return_val_if_fail (self->driver != NULL, NULL);
 
-  gsk_gl_command_queue_make_current (self->command_queue);
+  gsk_gl_command_queue_make_current (self->driver->command_queue);
 
   g_snprintf (version, sizeof version, "#version %d\n", self->glsl_version);
 
@@ -674,5 +675,5 @@ gsk_gl_compiler_compile (GskGLCompiler  *self,
       return NULL;
     }
 
-  return gsk_gl_program_new (self->command_queue, name, program_id);
+  return gsk_gl_program_new (self->driver, name, program_id);
 }
