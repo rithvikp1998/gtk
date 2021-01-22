@@ -116,8 +116,8 @@ struct _GskNextDriver
   guint in_frame : 1;
 };
 
-GskNextDriver     *gsk_next_driver_new                   (GskGLCommandQueue    *command_queue,
-                                                          gboolean              debug,
+GskNextDriver     *gsk_next_driver_from_shared_context   (GdkGLContext         *context,
+                                                          gboolean              debug_shaders,
                                                           GError              **error);
 GdkGLContext      *gsk_next_driver_get_context           (GskNextDriver        *self);
 gboolean           gsk_next_driver_create_render_target  (GskNextDriver        *self,

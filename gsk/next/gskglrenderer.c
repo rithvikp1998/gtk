@@ -20,6 +20,7 @@
 
 #include "config.h"
 
+#include <gdk/gdksurfaceprivate.h>
 #include <gsk/gskdebugprivate.h>
 #include <gsk/gskrendererprivate.h>
 
@@ -38,20 +39,15 @@ struct _GskNextRenderer
 {
   GskRenderer parent_instance;
 
-  /* The GskGLCommandQueue manages how we send all drawing operations,
-   * uniform changes, and other texture related operations to the GPU.
-   * It maintains a cache of state to help reduce the number of state
-   * changes we send to the GPU. Furthermore, it can reorder batches so
-   * that we switch programs and uniforms less frequently by verifying
-   * what batches can be reordered based on clipping and stacking.
+  /* This context is used to swap buffers when we are rendering directly
+   * to a GDK surface. It is also used to locate the shared driver for
+   * the display that we use to drive the command queue.
    */
-  GskGLCommandQueue *command_queue;
+  GdkGLContext *context;
 
-  /* The driver manages our program state and command queues. It gives
-   * us a single place to manage loading all the programs as well which
-   * unfortunately cannot be shared across all renderers for a display.
-   * (Context sharing explicitly does not name program/uniform state as
-   * shareable even though on some implementations it is).
+  /* The driver manages our program state and command queues. It also
+   * deals with caching textures, shaders, shadows, glyph, and icon
+   * caches through various helpers.
    */
   GskNextDriver *driver;
 };
@@ -70,8 +66,8 @@ gsk_next_renderer_realize (GskRenderer  *renderer,
                            GError      **error)
 {
   GskNextRenderer *self = (GskNextRenderer *)renderer;
-  GskGLCommandQueue *command_queue = NULL;
   GdkGLContext *context = NULL;
+  GdkGLContext *shared_context;
   GskNextDriver *driver = NULL;
   gboolean ret = FALSE;
   gboolean debug_shaders = FALSE;
@@ -79,23 +75,34 @@ gsk_next_renderer_realize (GskRenderer  *renderer,
   g_assert (GSK_IS_NEXT_RENDERER (self));
   g_assert (GDK_IS_SURFACE (surface));
 
+  if (self->context != NULL)
+    return TRUE;
+
+  g_assert (self->driver == NULL);
+  g_assert (self->context == NULL);
+
   if (!(context = gdk_surface_create_gl_context (surface, error)) ||
       !gdk_gl_context_realize (context, error))
     goto failure;
 
-  gdk_gl_context_make_current (context);
-
-  command_queue = gsk_gl_command_queue_new (context);
+  if (!(shared_context = gdk_surface_get_shared_data_gl_context (surface)))
+    {
+      g_set_error (error,
+                   GDK_GL_ERROR,
+                   GDK_GL_ERROR_NOT_AVAILABLE,
+                   "Failed to locate shared GL context for driver");
+      goto failure;
+    }
 
 #ifdef G_ENABLE_DEBUG
   if (GSK_RENDERER_DEBUG_CHECK (GSK_RENDERER (self), SHADERS))
     debug_shaders = TRUE;
 #endif
 
-  if (!(driver = gsk_next_driver_new (command_queue, debug_shaders, error)))
+  if (!(driver = gsk_next_driver_from_shared_context (shared_context, debug_shaders, error)))
     goto failure;
 
-  self->command_queue = g_steal_pointer (&command_queue);
+  self->context = g_steal_pointer (&context);
   self->driver = g_steal_pointer (&driver);
 
   ret = TRUE;
@@ -103,7 +110,6 @@ gsk_next_renderer_realize (GskRenderer  *renderer,
 failure:
   g_clear_object (&driver);
   g_clear_object (&context);
-  g_clear_object (&command_queue);
 
   return ret;
 }
@@ -116,7 +122,6 @@ gsk_next_renderer_unrealize (GskRenderer *renderer)
   g_assert (GSK_IS_NEXT_RENDERER (renderer));
 
   g_clear_object (&self->driver);
-  g_clear_object (&self->command_queue);
 }
 
 typedef struct _GskGLTextureState
@@ -207,32 +212,35 @@ gsk_gl_renderer_render (GskRenderer          *renderer,
   cairo_region_t *render_region;
   graphene_rect_t viewport;
   GskGLRenderJob *job;
-  GdkGLContext *context;
   GdkSurface *surface;
   float scale_factor;
 
   g_assert (GSK_IS_NEXT_RENDERER (renderer));
   g_assert (root != NULL);
 
-  context = gsk_gl_command_queue_get_context (self->command_queue);
-  surface = gdk_draw_context_get_surface (GDK_DRAW_CONTEXT (context));
+  surface = gdk_draw_context_get_surface (GDK_DRAW_CONTEXT (self->context));
   scale_factor = gdk_surface_get_scale_factor (surface);
-  render_region = get_render_region (surface, context);
+  render_region = get_render_region (surface, self->context);
 
   viewport.origin.x = 0;
   viewport.origin.y = 0;
   viewport.size.width = gdk_surface_get_width (surface) * scale_factor;
   viewport.size.height = gdk_surface_get_height (surface) * scale_factor;
 
-  gdk_draw_context_begin_frame (GDK_DRAW_CONTEXT (context), update_area);
-  job = gsk_gl_render_job_new (self->driver, &viewport, scale_factor, render_region, 0);
+  gdk_gl_context_make_current (self->context);
+  gdk_draw_context_begin_frame (GDK_DRAW_CONTEXT (self->context), update_area);
+
+  job = gsk_gl_render_job_new (self->driver, &viewport, scale_factor, render_region, self->context, 0);
+
 #ifdef G_ENABLE_DEBUG
   if (GSK_RENDERER_DEBUG_CHECK (GSK_RENDERER (self), FALLBACK))
     gsk_gl_render_job_set_debug_fallback (job, TRUE);
 #endif
 
   gsk_gl_render_job_render (job, root);
-  gdk_draw_context_end_frame (GDK_DRAW_CONTEXT (context));
+
+  gdk_gl_context_make_current (self->context);
+  gdk_draw_context_end_frame (GDK_DRAW_CONTEXT (self->context));
 
   gsk_gl_render_job_free (job);
 
@@ -255,7 +263,7 @@ gsk_gl_renderer_render_texture (GskRenderer           *renderer,
   g_assert (GSK_IS_NEXT_RENDERER (renderer));
   g_assert (root != NULL);
 
-  context = gsk_gl_command_queue_get_context (self->command_queue);
+  context = gsk_gl_command_queue_get_context (self->driver->command_queue);
   width = ceilf (viewport->size.width);
   height = ceilf (viewport->size.height);
 
@@ -267,7 +275,7 @@ gsk_gl_renderer_render_texture (GskRenderer           *renderer,
                                              &render_target))
     return NULL;
 
-  job = gsk_gl_render_job_new (self->driver, viewport, 1, NULL, render_target->framebuffer_id);
+  job = gsk_gl_render_job_new (self->driver, viewport, 1, NULL, context, render_target->framebuffer_id);
   gsk_gl_render_job_render_flipped (job, root);
   gsk_gl_render_job_free (job);
 
@@ -282,7 +290,6 @@ gsk_next_renderer_dispose (GObject *object)
 #ifdef G_ENABLE_DEBUG
   GskNextRenderer *self = (GskNextRenderer *)object;
 
-  g_assert (self->command_queue == NULL);
   g_assert (self->driver == NULL);
 #endif
 

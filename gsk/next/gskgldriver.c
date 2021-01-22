@@ -393,9 +393,9 @@ gsk_next_driver_autorelease_framebuffer (GskNextDriver *self,
   g_array_append_val (self->autorelease_framebuffers, framebuffer_id);
 }
 
-GskNextDriver *
+static GskNextDriver *
 gsk_next_driver_new (GskGLCommandQueue  *command_queue,
-                     gboolean            debug,
+                     gboolean            debug_shaders,
                      GError            **error)
 {
   GskNextDriver *self;
@@ -409,7 +409,7 @@ gsk_next_driver_new (GskGLCommandQueue  *command_queue,
 
   self = g_object_new (GSK_TYPE_NEXT_DRIVER, NULL);
   self->command_queue = g_object_ref (command_queue);
-  self->debug = !!debug;
+  self->debug = !!debug_shaders;
 
   if (!gsk_next_driver_load_programs (self, error))
     {
@@ -422,6 +422,49 @@ gsk_next_driver_new (GskGLCommandQueue  *command_queue,
   self->shadows = gsk_gl_shadow_library_new (self);
 
   return g_steal_pointer (&self);
+}
+
+/**
+ * gsk_next_driver_from_shared_context:
+ * @context: a shared #GdkGLContext retrieved with gdk_gl_context_get_shared_context()
+ * @debug_shaders: if debug information for shaders should be displayed
+ * @error: location for error information
+ *
+ * Retrieves a driver for a shared context. Generally this is shared across all GL
+ * contexts for a display so that fewer programs are necessary for driving output.
+ *
+ * Returns: (transfer full): a #GskNextDriver if successful; otherwise %NULL and
+ *   @error is set.
+ */
+GskNextDriver *
+gsk_next_driver_from_shared_context (GdkGLContext  *context,
+                                     gboolean       debug_shaders,
+                                     GError       **error)
+{
+  GskGLCommandQueue *command_queue = NULL;
+  GskNextDriver *driver;
+
+  g_return_val_if_fail (GDK_IS_GL_CONTEXT (context), NULL);
+
+  if ((driver = g_object_get_data (G_OBJECT (context), "GSK_NEXT_DRIVER")))
+    return g_object_ref (driver);
+
+  gdk_gl_context_make_current (context);
+
+  command_queue = gsk_gl_command_queue_new (context);
+
+  if (!(driver = gsk_next_driver_new (command_queue, debug_shaders, error)))
+    goto failure;
+
+  g_object_set_data_full (G_OBJECT (context),
+                          "GSK_NEXT_DRIVER",
+                          g_object_ref (driver),
+                          g_object_unref);
+
+failure:
+  g_clear_object (&command_queue);
+
+  return g_steal_pointer (&driver);
 }
 
 /**
@@ -604,6 +647,7 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
                               int              min_filter,
                               int              mag_filter)
 {
+  GdkGLContext *previous_context = NULL;
   GdkGLContext *context;
   GdkTexture *downloaded_texture = NULL;
   GdkTexture *source_texture;
@@ -631,6 +675,8 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
       else
         {
           cairo_surface_t *surface;
+
+          previous_context = gdk_gl_context_get_current ();
 
           /* In this case, we have to temporarily make the texture's
            * context the current one, download its data into our context
@@ -680,6 +726,9 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
                                       "GdkTexture<%p> %d", texture, t->texture_id);
 
   g_clear_object (&downloaded_texture);
+
+  if (previous_context)
+    gdk_gl_context_make_current (previous_context);
 
   return t->texture_id;
 }
