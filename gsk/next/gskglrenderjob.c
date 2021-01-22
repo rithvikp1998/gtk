@@ -74,20 +74,59 @@
 
 struct _GskGLRenderJob
 {
-  GskNextDriver     *driver;
+  /* The driver to be used. This is shared among all the renderers on a given
+   * GdkDisplay and uses the shared GL context to send commands.
+   */
+  GskNextDriver *driver;
+
+  /* The command queue (which is just a faster pointer to the driver's
+   * command queue.
+   */
   GskGLCommandQueue *command_queue;
-  cairo_region_t    *region;
-  guint              framebuffer;
-  graphene_rect_t    viewport;
-  graphene_matrix_t  projection;
-  GArray            *modelview;
-  GArray            *clip;
-  float              alpha;
-  float              offset_x;
-  float              offset_y;
-  float              scale_x;
-  float              scale_y;
-  guint              debug_fallback : 1;
+
+  /* The region that we are clipping. Normalized to a single rectangle region. */
+  cairo_region_t *region;
+
+  /* The framebuffer to draw to in the @context GL context. So 0 would be the
+   * default framebuffer of @context. This is important to note as many other
+   * operations could be done using objects shared from the command queues
+   * GL context.
+   */
+  guint framebuffer;
+
+  /* The viewport we are using. This state is updated as we process render
+   * nodes in the specific visitor callbacks.
+   */
+  graphene_rect_t viewport;
+
+  /* The current projection, updated as we process nodes */
+  graphene_matrix_t projection;
+
+  /* An array of GskGLRenderModelview updated as nodes are processed. The
+   * current modelview is the last element.
+   */
+  GArray *modelview;
+
+  /* An array of GskGLRenderClip updated as nodes are processed. The
+   * current clip is the last element.
+   */
+  GArray *clip;
+
+  /* Our current alpha state as we process nodes */
+  float alpha;
+
+  /* Offset (delta x,y) as we process nodes. Occasionally this is merged into
+   * a transform that is referenced from child transform nodes.
+   */
+  float offset_x;
+  float offset_y;
+
+  /* The scale we are processing, possibly updated by transforms */
+  float scale_x;
+  float scale_y;
+
+  /* If we should be rendering red zones over fallback nodes */
+  guint debug_fallback : 1;
 };
 
 typedef struct GskGLRenderState
