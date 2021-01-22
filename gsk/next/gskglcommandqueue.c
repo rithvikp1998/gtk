@@ -260,11 +260,20 @@ GskGLCommandQueue *
 gsk_gl_command_queue_new (GdkGLContext *context)
 {
   GskGLCommandQueue *self;
+  GdkGLContext *previous_context;
 
   g_return_val_if_fail (GDK_IS_GL_CONTEXT (context), NULL);
 
   self = g_object_new (GSK_TYPE_GL_COMMAND_QUEUE, NULL);
   self->context = g_object_ref (context);
+
+  previous_context = gdk_gl_context_get_current ();
+
+  gdk_gl_context_make_current (context);
+  glGetIntegerv (GL_MAX_TEXTURE_SIZE, &self->max_texture_size);
+
+  if (previous_context != NULL)
+    gdk_gl_context_make_current (previous_context);
 
   return g_steal_pointer (&self);
 }
@@ -875,9 +884,6 @@ gsk_gl_command_queue_begin_frame (GskGLCommandQueue *self)
   g_return_if_fail (self->batches->len == 0);
 
   self->tail_batch_index = -1;
-
-  if G_UNLIKELY (self->max_texture_size == -1)
-    glGetIntegerv (GL_MAX_TEXTURE_SIZE, &self->max_texture_size);
 }
 
 /**
