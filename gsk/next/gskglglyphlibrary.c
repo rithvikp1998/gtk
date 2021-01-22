@@ -23,6 +23,7 @@
 #include <gdk/gdkglcontextprivate.h>
 #include <gdk/gdkmemorytextureprivate.h>
 
+#include "gskglcommandqueueprivate.h"
 #include "gskgldriverprivate.h"
 #include "gskglglyphlibraryprivate.h"
 
@@ -187,6 +188,7 @@ gsk_gl_glyph_library_upload_glyph (GskGLGlyphLibrary     *self,
   cairo_scaled_font_t *scaled_font;
   GskGLTextureAtlas *atlas;
   cairo_surface_t *surface;
+  GdkGLContext *context;
   guchar *pixel_data;
   guchar *free_data = NULL;
   guint gl_format;
@@ -198,6 +200,8 @@ gsk_gl_glyph_library_upload_glyph (GskGLGlyphLibrary     *self,
   g_assert (GSK_IS_GL_GLYPH_LIBRARY (self));
   g_assert (key != NULL);
   g_assert (value != NULL);
+
+  context = GSK_GL_TEXTURE_LIBRARY (self)->driver->command_queue->context;
 
   scaled_font = pango_cairo_font_get_scaled_font ((PangoCairoFont *)key->font);
   if G_UNLIKELY (scaled_font == NULL ||
@@ -217,6 +221,8 @@ gsk_gl_glyph_library_upload_glyph (GskGLGlyphLibrary     *self,
   texture_id = GSK_GL_TEXTURE_ATLAS_ENTRY_TEXTURE (value);
 
   g_assert (texture_id > 0);
+
+  gdk_gl_context_make_current (context);
 
   glPixelStorei (GL_UNPACK_ROW_LENGTH, stride / 4);
   glBindTexture (GL_TEXTURE_2D, texture_id);
