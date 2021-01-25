@@ -111,8 +111,7 @@ struct _GskGLCommandQueue
 };
 
 GskGLCommandQueue *gsk_gl_command_queue_new                  (GdkGLContext             *context,
-                                                              GskGLUniformState        *uniforms,
-                                                              GskGLAttachmentState     *attachments);
+                                                              GskGLUniformState        *uniforms);
 GdkGLContext      *gsk_gl_command_queue_get_context          (GskGLCommandQueue        *self);
 void               gsk_gl_command_queue_make_current         (GskGLCommandQueue        *self);
 void               gsk_gl_command_queue_begin_frame          (GskGLCommandQueue        *self);

@@ -461,7 +461,7 @@ gsk_next_driver_from_shared_context (GdkGLContext  *context,
    * shared context, all other contexts sharing with it will have access
    * to those programs.
    */
-  command_queue = gsk_gl_command_queue_new (context, NULL, NULL);
+  command_queue = gsk_gl_command_queue_new (context, NULL);
 
   if (!(driver = gsk_next_driver_new (command_queue, debug_shaders, error)))
     goto failure;
@@ -1114,7 +1114,5 @@ gsk_next_driver_create_command_queue (GskNextDriver *self,
   g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), NULL);
   g_return_val_if_fail (GDK_IS_GL_CONTEXT (context), NULL);
 
-  return gsk_gl_command_queue_new (context,
-                                   self->shared_command_queue->uniforms,
-                                   self->shared_command_queue->attachments);
+  return gsk_gl_command_queue_new (context, self->shared_command_queue->uniforms);
 }

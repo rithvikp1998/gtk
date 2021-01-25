@@ -255,9 +255,8 @@ gsk_gl_command_queue_init (GskGLCommandQueue *self)
 }
 
 GskGLCommandQueue *
-gsk_gl_command_queue_new (GdkGLContext         *context,
-                          GskGLUniformState    *uniforms,
-                          GskGLAttachmentState *attachments)
+gsk_gl_command_queue_new (GdkGLContext      *context,
+                          GskGLUniformState *uniforms)
 {
   GskGLCommandQueue *self;
 
@@ -265,12 +264,7 @@ gsk_gl_command_queue_new (GdkGLContext         *context,
 
   self = g_object_new (GSK_TYPE_GL_COMMAND_QUEUE, NULL);
   self->context = g_object_ref (context);
-
-  /* Use shared attachment state if we're provided one */
-  if (attachments != NULL)
-    self->attachments = gsk_gl_attachment_state_ref (attachments);
-  else
-    self->attachments = gsk_gl_attachment_state_new ();
+  self->attachments = gsk_gl_attachment_state_new ();
 
   /* Use shared uniform state if we're provided one */
   if (uniforms != NULL)
