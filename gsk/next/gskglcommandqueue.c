@@ -991,7 +991,6 @@ gsk_gl_command_queue_create_texture (GskGLCommandQueue *self,
   if (width > self->max_texture_size || height > self->max_texture_size)
     return -1;
 
-  gsk_gl_command_queue_save (self);
   gsk_gl_command_queue_make_current (self);
 
   glGenTextures (1, &texture_id);
@@ -1009,7 +1008,9 @@ gsk_gl_command_queue_create_texture (GskGLCommandQueue *self,
   else
     glTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
 
-  gsk_gl_command_queue_restore (self);
+  /* Restore the previous texture if it was set */
+  if (self->attachments->textures[0].id != 0)
+    glBindTexture (GL_TEXTURE_2D, self->attachments->textures[0].id);
 
   return (int)texture_id;
 }
