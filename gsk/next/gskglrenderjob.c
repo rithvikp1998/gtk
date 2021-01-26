@@ -2869,7 +2869,7 @@ gsk_gl_render_job_visit_blend_node (GskGLRenderJob *job,
   gsk_gl_program_set_uniform_texture (job->driver->blend,
                                       UNIFORM_BLEND_SOURCE2,
                                       GL_TEXTURE_2D,
-                                      GL_TEXTURE0,
+                                      GL_TEXTURE1,
                                       top_offscreen.texture_id);
   gsk_gl_program_set_uniform1i (job->driver->blend,
                                 UNIFORM_BLEND_MODE,
