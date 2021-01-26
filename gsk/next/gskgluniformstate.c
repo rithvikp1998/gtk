@@ -761,7 +761,14 @@ gsk_gl_uniform_state_snapshot (GskGLUniformState         *state,
     {
       GskGLUniformInfo *info = &g_array_index (program_info->uniform_info, GskGLUniformInfo, i);
 
-      if (!info->changed)
+#if G_ENABLE_DEBUG
+      {
+        guint size = uniform_sizes[info->format] * MAX (1, info->array_count);
+        g_assert (info->format == 0 || info->offset + size <= state->uniform_data->len);
+      }
+#endif
+
+      if (info->format == 0 || !info->changed)
         continue;
 
       callback (info, i, user_data);
@@ -799,8 +806,14 @@ gsk_gl_uniform_state_end_frame (GskGLUniformState *state)
       for (guint j = 0; j < program_info->uniform_info->len; j++)
         {
           GskGLUniformInfo *info = &g_array_index (program_info->uniform_info, GskGLUniformInfo, j);
-          guint size = uniform_sizes[info->format] * MAX (1, info->array_count);
+          guint size;
           guint offset;
+
+          if (info->format == 0)
+            continue;
+
+          /* Calculate how much size is needed for the uniform, including arrays */
+          size = uniform_sizes[info->format] * MAX (1, info->array_count);
 
           g_assert (info->offset + size <= state->uniform_data->len);
 
