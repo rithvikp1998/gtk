@@ -2553,6 +2553,9 @@ gsk_gl_render_job_visit_text_node (GskGLRenderJob *job,
   GskGLGlyphKey lookup;
   guint last_texture = 0;
 
+  if (num_glyphs == 0)
+    return;
+
   /* If the font has color glyphs, we don't need to recolor anything */
   if (!force_color && gsk_text_node_has_color_glyphs (node))
     {
