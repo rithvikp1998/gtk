@@ -155,6 +155,8 @@ alloc_uniform_data (GByteArray *buffer,
   guint masked = buffer->len & (align - 1);
   guint old_len = buffer->len;
 
+  g_assert (size > 0);
+
   /* Try to give a more natural alignment based on the size
    * of the uniform. In case it's greater than 4 try to at least
    * give us an 8-byte alignment to be sure we can dereference
@@ -505,6 +507,7 @@ gsk_gl_uniform_state_set_rounded_rect (GskGLUniformState    *state,
   g_assert (state != NULL);
   g_assert (program > 0);
   g_assert (rounded_rect != NULL);
+  g_assert (uniform_sizes[GSK_GL_UNIFORM_FORMAT_ROUNDED_RECT] == sizeof *rounded_rect);
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_ROUNDED_RECT, 1, location, &info)))
     {
@@ -796,6 +799,8 @@ gsk_gl_uniform_state_end_frame (GskGLUniformState *state)
           GskGLUniformInfo *info = &g_array_index (program_info->uniform_info, GskGLUniformInfo, j);
           guint size = uniform_sizes[info->format] * MAX (1, info->array_count);
           guint offset;
+
+          g_assert (info->offset + size <= state->uniform_data->len);
 
           alloc_uniform_data (buffer, size, &offset);
           memcpy (&buffer->data[offset], &state->uniform_data->data[info->offset], size);
