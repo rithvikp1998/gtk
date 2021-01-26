@@ -2482,7 +2482,8 @@ gsk_gl_render_job_visit_cross_fade_node (GskGLRenderJob *job,
                                       offscreen_end.texture_id);
   gsk_gl_program_set_uniform1i (job->driver->cross_fade,
                                 UNIFORM_CROSS_FADE_PROGRESS,
-                                gsk_cross_fade_node_get_progress (node));
+                                progress);
+  gsk_gl_render_job_draw_offscreen_rect (job, &node->bounds);
   gsk_gl_program_end_draw (job->driver->cross_fade);
 }
 
