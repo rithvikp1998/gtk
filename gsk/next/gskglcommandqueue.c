@@ -905,7 +905,19 @@ gsk_gl_command_queue_end_frame (GskGLCommandQueue *self)
   g_return_if_fail (GSK_IS_GL_COMMAND_QUEUE (self));
   g_return_if_fail (self->saved_state->len == 0);
 
+  gsk_gl_command_queue_make_current (self);
+
   gsk_gl_uniform_state_end_frame (self->uniforms);
+
+  /* Reset attachments so we don't hold on to any textures
+   * that might be released after the frame.
+   */
+  for (guint i = 0; i < G_N_ELEMENTS (self->attachments->textures); i++)
+    {
+      glActiveTexture (GL_TEXTURE0 + i);
+      glBindTexture (GL_TEXTURE_2D, 0);
+      self->attachments->textures[i].id = 0;
+    }
 
   g_string_chunk_clear (self->debug_groups);
 
