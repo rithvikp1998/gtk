@@ -3254,9 +3254,9 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
         GskRenderNode *end_node = gsk_cross_fade_node_get_end_child (node);
         float progress = gsk_cross_fade_node_get_progress (node);
 
-        if (progress <= 0)
+        if (progress <= 0.0f)
           gsk_gl_render_job_visit_node (job, gsk_cross_fade_node_get_start_child (node));
-        else if (progress >= 1 || equal_texture_nodes (start_node, end_node))
+        else if (progress >= 1.0f || equal_texture_nodes (start_node, end_node))
           gsk_gl_render_job_visit_node (job, gsk_cross_fade_node_get_end_child (node));
         else
           gsk_gl_render_job_visit_cross_fade_node (job, node);
