@@ -783,9 +783,11 @@ gsk_gl_uniform_state_end_frame (GskGLUniformState *state)
   /* After a frame finishes, we want to remove all our copies of uniform
    * data that isn't needed any longer. We just create a new byte array
    * that contains the new data with the gaps removed.
+   *
+   * Create new buffer but with something similar in size to the previous
+   * frame as we can reduce chances of a realloc on the next frame.
    */
-
-  buffer = g_byte_array_sized_new (4096);
+  buffer = g_byte_array_sized_new (state->uniform_data->len);
 
   for (guint i = 0; i < state->program_info->len; i++)
     {
