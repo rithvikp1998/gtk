@@ -2454,8 +2454,11 @@ gsk_gl_render_job_visit_cross_fade_node (GskGLRenderJob *job,
   if (!gsk_gl_render_job_visit_node_with_offscreen (job, end_node, &offscreen_end))
     {
       float prev_alpha = job->alpha;
+
+      job->alpha = job->alpha * progress;
       gsk_gl_render_job_visit_node (job, start_node);
       job->alpha = prev_alpha;
+
       return;
     }
 
