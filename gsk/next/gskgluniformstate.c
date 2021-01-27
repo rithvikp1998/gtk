@@ -804,7 +804,7 @@ gsk_gl_uniform_state_end_frame (GskGLUniformState *state)
 
   for (guint i = 0; i < state->program_info->len; i++)
     {
-      ProgramInfo *program_info = &g_array_index (state->program_info, ProgramInfo, i);
+      const ProgramInfo *program_info = &g_array_index (state->program_info, ProgramInfo, i);
 
       if (program_info->uniform_info == NULL)
         continue;
