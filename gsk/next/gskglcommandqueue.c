@@ -693,7 +693,6 @@ apply_scissor (guint                        framebuffer,
              surface_height - (scissor->height * scale_factor) - (scissor->y * scale_factor),
              scissor->width * scale_factor,
              scissor->height * scale_factor);
-
 }
 
 /**
