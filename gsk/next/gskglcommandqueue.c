@@ -884,6 +884,7 @@ gsk_gl_command_queue_begin_frame (GskGLCommandQueue *self)
   g_return_if_fail (self->batches->len == 0);
 
   self->tail_batch_index = -1;
+  self->in_frame = TRUE;
 }
 
 /**
@@ -925,6 +926,7 @@ gsk_gl_command_queue_end_frame (GskGLCommandQueue *self)
   self->batch_uniforms->len = 0;
   self->batch_binds->len = 0;
   self->tail_batch_index = -1;
+  self->in_frame = FALSE;
 }
 
 gboolean

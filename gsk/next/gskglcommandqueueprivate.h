@@ -106,6 +106,9 @@ struct _GskGLCommandQueue
    */
   int tail_batch_index;
 
+  /* If we're inside a begin/end_frame pair */
+  guint in_frame : 1;
+
   /* If we're inside of a begin_draw()/end_draw() pair. */
   guint in_draw : 1;
 };
