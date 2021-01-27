@@ -179,6 +179,8 @@ gsk_gl_program_begin_draw (GskGLProgram            *self,
   g_assert (modelview != NULL);
   g_assert (clip != NULL);
 
+  gsk_gl_command_queue_begin_draw (self->driver->command_queue, self->id, viewport);
+
   if (self->viewport_location > -1)
     gsk_gl_command_queue_set_uniform4f (self->driver->command_queue,
                                         self->id,
@@ -222,8 +224,6 @@ gsk_gl_program_begin_draw (GskGLProgram            *self,
                                         self->id,
                                         self->alpha_location,
                                         alpha);
-
-  gsk_gl_command_queue_begin_draw (self->driver->command_queue, self->id, viewport);
 }
 
 void
