@@ -673,6 +673,9 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
   GdkTexture *downloaded_texture = NULL;
   GdkTexture *source_texture;
   GskGLTexture *t;
+  guint texture_id;
+  int height;
+  int width;
 
   g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), 0);
   g_return_val_if_fail (GDK_IS_TEXTURE (texture), 0);
@@ -725,20 +728,22 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
       source_texture = texture;
     }
 
-  t = g_slice_new0 (GskGLTexture);
-  t->width = gdk_texture_get_width (texture);
-  t->height = gdk_texture_get_height (texture);
-  t->last_used_in_frame = self->current_frame_id;
-  t->min_filter = min_filter;
-  t->mag_filter = mag_filter;
-  t->texture_id = gsk_gl_command_queue_upload_texture (self->command_queue,
-                                                       source_texture,
-                                                       0,
-                                                       0,
-                                                       t->width,
-                                                       t->height,
-                                                       t->min_filter,
-                                                       t->mag_filter);
+  width = gdk_texture_get_width (texture);
+  height = gdk_texture_get_height (texture);
+  texture_id = gsk_gl_command_queue_upload_texture (self->command_queue,
+                                                    source_texture,
+                                                    0,
+                                                    0,
+                                                    width,
+                                                    height,
+                                                    min_filter,
+                                                    mag_filter);
+
+  t = gsk_gl_texture_new (texture_id,
+                          width, height, min_filter, mag_filter,
+                          self->current_frame_id);
+
+  g_hash_table_insert (self->textures, GUINT_TO_POINTER (texture_id), t);
 
   if (gdk_texture_set_render_data (texture, self, t, gsk_gl_texture_destroyed))
     t->user = texture;
@@ -751,7 +756,7 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
   if (previous_context)
     gdk_gl_context_make_current (previous_context);
 
-  return t->texture_id;
+  return texture_id;
 }
 
 /**
