@@ -515,6 +515,8 @@ gsk_gl_uniform_state_set_rounded_rect (GskGLUniformState    *state,
         {
           REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_ROUNDED_RECT, 1);
 
+          g_assert (info->changed || !info->send_corners);
+
           if (!info->send_corners)
             {
               if (!graphene_size_equal (&u->corner[0], &rounded_rect->corner[0]) ||
