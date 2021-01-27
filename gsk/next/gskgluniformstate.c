@@ -513,9 +513,7 @@ gsk_gl_uniform_state_set_rounded_rect (GskGLUniformState    *state,
     {
       if (!gsk_rounded_rect_equal (rounded_rect, u))
         {
-          REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_ROUNDED_RECT, 1);
-
-          g_assert (info->changed || !info->send_corners);
+          g_assert (!info->send_corners || info->changed);
 
           if (!info->send_corners)
             {
@@ -525,6 +523,8 @@ gsk_gl_uniform_state_set_rounded_rect (GskGLUniformState    *state,
                   !graphene_size_equal (&u->corner[3], &rounded_rect->corner[3]))
                 info->send_corners = TRUE;
             }
+
+          REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_ROUNDED_RECT, 1);
 
           memcpy (u, rounded_rect, sizeof *rounded_rect);
           program_changed (state, info, program);
