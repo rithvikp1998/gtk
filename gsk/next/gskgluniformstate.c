@@ -632,7 +632,7 @@ gsk_gl_uniform_state_set_color (GskGLUniformState *state,
       if (color == NULL)
         color = &transparent;
 
-      if (!gdk_rgba_equal (u, color))
+      if (info->initial || !gdk_rgba_equal (u, color))
         {
           REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_COLOR, 1);
           memcpy (u, color, sizeof *color);
@@ -653,10 +653,11 @@ gsk_gl_uniform_state_set1fv (GskGLUniformState *state,
 
   g_assert (state != NULL);
   g_assert (program > 0);
+  g_assert (count > 0);
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_1FV, count, location, &info)))
     {
-      gboolean changed = memcmp (u, value, sizeof (Uniform1f) * count) != 0;
+      gboolean changed = info->initial || memcmp (u, value, sizeof *u  * count) != 0;
 
       if (changed)
         {
@@ -679,10 +680,11 @@ gsk_gl_uniform_state_set2fv (GskGLUniformState *state,
 
   g_assert (state != NULL);
   g_assert (program > 0);
+  g_assert (count > 0);
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_2FV, count, location, &info)))
     {
-      gboolean changed = memcmp (u, value, sizeof (Uniform2f) * count) != 0;
+      gboolean changed = info->initial || memcmp (u, value, sizeof *u * count) != 0;
 
       if (changed)
         {
@@ -705,10 +707,11 @@ gsk_gl_uniform_state_set3fv (GskGLUniformState *state,
 
   g_assert (state != NULL);
   g_assert (program > 0);
+  g_assert (count > 0);
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_3FV, count, location, &info)))
     {
-      gboolean changed = memcmp (u, value, sizeof (Uniform3f) * count) != 0;
+      gboolean changed = info->initial || memcmp (u, value, sizeof *u * count) != 0;
 
       if (changed)
         {
@@ -731,10 +734,11 @@ gsk_gl_uniform_state_set4fv (GskGLUniformState *state,
 
   g_assert (state != NULL);
   g_assert (program > 0);
+  g_assert (count > 0);
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_4FV, count, location, &info)))
     {
-      gboolean changed = memcmp (u, value, sizeof (Uniform4f) * count) != 0;
+      gboolean changed = info->initial || memcmp (u, value, sizeof *u * count) != 0;
 
       if (changed)
         {
