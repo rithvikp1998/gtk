@@ -39,7 +39,6 @@
 #include "gskglshadowlibraryprivate.h"
 #include "gskgltexturepoolprivate.h"
 
-#define TEXTURES_CACHED_FOR_N_FRAMES 1
 #define ATLAS_SIZE 512
 
 G_DEFINE_TYPE (GskNextDriver, gsk_next_driver, G_TYPE_OBJECT)
@@ -68,25 +67,6 @@ texture_key_equal (gconstpointer v1, gconstpointer v2)
          k1->filter == k2->filter &&
          k1->pointer_is_child == k2->pointer_is_child &&
          (!k1->pointer_is_child || graphene_rect_equal (&k1->parent_rect, &k2->parent_rect));
-}
-
-static void
-gsk_gl_texture_free (gpointer data)
-{
-  GskGLTexture *texture = data;
-
-  if (texture != NULL)
-    {
-      if (texture->user)
-        gdk_texture_clear_render_data (texture->user);
-
-      if (texture->texture_id != 0)
-        glDeleteTextures (1, &texture->texture_id);
-
-      /* TODO: Clear slices */
-
-      g_slice_free (GskGLTexture, texture);
-    }
 }
 
 static inline void
@@ -135,6 +115,7 @@ gsk_next_driver_collect_unused_textures (GskNextDriver *self,
   GHashTableIter iter;
   gpointer k, v;
   guint old_size;
+  guint collected;
 
   g_assert (GSK_IS_NEXT_DRIVER (self));
 
@@ -155,7 +136,9 @@ gsk_next_driver_collect_unused_textures (GskNextDriver *self,
         }
     }
 
-  return old_size - g_hash_table_size (self->textures);
+  collected = old_size - g_hash_table_size (self->textures);
+
+  return collected;
 }
 
 static void
@@ -508,12 +491,12 @@ gsk_next_driver_begin_frame (GskNextDriver     *self,
   gsk_gl_texture_library_begin_frame (GSK_GL_TEXTURE_LIBRARY (self->glyphs));
   gsk_gl_texture_library_begin_frame (GSK_GL_TEXTURE_LIBRARY (self->shadows));
 
-  /* We avoid collecting on every frame. To do so would accidentally
-   * drop some textures we want cached but fell out of the damage clip
-   * on this cycle through the rendering.
+  /* Remove all textures that are from a previous frame or are no
+   * longer used by linked GdkTexture. We do this at the beginning
+   * of the following frame instead of the end so that we reduce chances
+   * we block on any resources while delivering our frames.
    */
-  gsk_next_driver_collect_unused_textures (self,
-                                           self->current_frame_id - TEXTURES_CACHED_FOR_N_FRAMES);
+  gsk_next_driver_collect_unused_textures (self, self->current_frame_id);
 }
 
 /**
@@ -633,6 +616,7 @@ gsk_next_driver_cache_texture (GskNextDriver       *self,
   g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
   g_return_if_fail (key != NULL);
   g_return_if_fail (texture_id > 0);
+  g_return_if_fail (g_hash_table_contains (self->textures, GUINT_TO_POINTER (texture_id)));
 
   k = g_memdup (key, sizeof *key);
 
@@ -786,12 +770,18 @@ gsk_next_driver_create_texture (GskNextDriver *self,
                                 int            min_filter,
                                 int            mag_filter)
 {
+  GskGLTexture *texture;
+
   g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), NULL);
 
-  return gsk_gl_texture_pool_get (&self->texture_pool,
-                                  width, height,
-                                  min_filter, mag_filter,
-                                  TRUE);
+  texture = gsk_gl_texture_pool_get (&self->texture_pool,
+                                     width, height,
+                                     min_filter, mag_filter,
+                                     TRUE);
+  g_hash_table_insert (self->textures,
+                       GUINT_TO_POINTER (texture->texture_id),
+                       texture);
+  return texture;
 }
 
 /**
@@ -821,12 +811,18 @@ gsk_next_driver_acquire_texture (GskNextDriver *self,
                                  int            min_filter,
                                  int            mag_filter)
 {
+  GskGLTexture *texture;
+
   g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), NULL);
 
-  return gsk_gl_texture_pool_get (&self->texture_pool,
-                                  width, height,
-                                  min_filter, mag_filter,
-                                  FALSE);
+  texture = gsk_gl_texture_pool_get (&self->texture_pool,
+                                     width, height,
+                                     min_filter, mag_filter,
+                                     FALSE);
+  g_hash_table_insert (self->textures,
+                       GUINT_TO_POINTER (texture->texture_id),
+                       texture);
+  return texture;
 }
 
 /**
@@ -846,6 +842,11 @@ gsk_next_driver_release_texture (GskNextDriver *self,
                                  GskGLTexture  *texture)
 {
   g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
+  g_return_if_fail (texture != NULL);
+
+  g_hash_table_remove (self->textures,
+                       GUINT_TO_POINTER (texture->texture_id));
+  remove_texture_key_for_id (self, texture->texture_id);
 
   gsk_gl_texture_pool_put (&self->texture_pool, texture);
 }
@@ -964,9 +965,23 @@ gsk_next_driver_release_render_target (GskNextDriver     *self,
     }
   else
     {
+      GskGLTexture *texture;
+
       texture_id = render_target->texture_id;
+
+      texture = gsk_gl_texture_new (render_target->texture_id,
+                                    render_target->width,
+                                    render_target->height,
+                                    render_target->min_filter,
+                                    render_target->mag_filter,
+                                    self->current_frame_id);
+      g_hash_table_insert (self->textures,
+                           GUINT_TO_POINTER (texture_id),
+                           g_steal_pointer (&texture));
+
       gsk_next_driver_autorelease_framebuffer (self, render_target->framebuffer_id);
       g_slice_free (GskGLRenderTarget, render_target);
+
     }
 
   return texture_id;
