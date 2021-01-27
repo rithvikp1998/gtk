@@ -63,6 +63,13 @@ GskGLTexture *gsk_gl_texture_pool_get   (GskGLTexturePool *self,
                                          gboolean          always_create);
 void          gsk_gl_texture_pool_put   (GskGLTexturePool *self,
                                          GskGLTexture     *texture);
+GskGLTexture *gsk_gl_texture_new        (guint             texture_id,
+                                         int               width,
+                                         int               height,
+                                         int               min_filter,
+                                         int               mag_filter,
+                                         gint64            frame_id);
+void          gsk_gl_texture_free       (GskGLTexture     *texture);
 
 G_END_DECLS
 

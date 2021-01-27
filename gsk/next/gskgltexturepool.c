@@ -22,18 +22,26 @@
 
 #include <string.h>
 
+#include <gdk/gdktextureprivate.h>
+
 #include "gskgltexturepoolprivate.h"
 
-static void
+void
 gsk_gl_texture_free (GskGLTexture *texture)
 {
-  if (texture->texture_id != 0)
+  if (texture != NULL)
     {
-      glDeleteTextures (1, &texture->texture_id);
-      texture->texture_id = 0;
-    }
+      if (texture->user)
+        g_clear_pointer (&texture->user, gdk_texture_clear_render_data);
 
-  g_slice_free (GskGLTexture, texture);
+      if (texture->texture_id != 0)
+        {
+          glDeleteTextures (1, &texture->texture_id);
+          texture->texture_id = 0;
+        }
+
+      g_slice_free (GskGLTexture, texture);
+    }
 }
 
 void
@@ -180,6 +188,29 @@ create_texture:
     glTexImage2D (GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_BGRA, GL_UNSIGNED_BYTE, NULL);
 
   glBindTexture (GL_TEXTURE_2D, 0);
+
+  return texture;
+}
+
+GskGLTexture *
+gsk_gl_texture_new (guint  texture_id,
+                    int    width,
+                    int    height,
+                    int    min_filter,
+                    int    mag_filter,
+                    gint64 frame_id)
+{
+  GskGLTexture *texture;
+
+  texture = g_slice_new0 (GskGLTexture);
+  texture->texture_id = texture_id;
+  texture->width_link.data = texture;
+  texture->height_link.data = texture;
+  texture->min_filter = min_filter;
+  texture->mag_filter = mag_filter;
+  texture->width = width;
+  texture->height = height;
+  texture->last_used_in_frame = frame_id;
 
   return texture;
 }
