@@ -544,6 +544,16 @@ gsk_next_driver_end_frame (GskNextDriver *self)
       self->autorelease_framebuffers->len = 0;
     }
 
+#if 0
+  g_print ("End Frame: textures=%u with_key=%u reverse=%u pool=%u:%u atlases=%u\n",
+           g_hash_table_size (self->textures),
+           g_hash_table_size (self->key_to_texture_id),
+           g_hash_table_size (self->texture_id_to_key),
+           self->texture_pool.by_width.length,
+           self->texture_pool.by_height.length,
+           self->atlases->len);
+#endif
+
   gsk_gl_texture_pool_clear (&self->texture_pool);
 
   self->in_frame = FALSE;
