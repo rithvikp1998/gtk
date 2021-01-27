@@ -763,10 +763,11 @@ gsk_gl_uniform_state_snapshot (GskGLUniformState         *state,
     {
       GskGLUniformInfo *info = &g_array_index (program_info->uniform_info, GskGLUniformInfo, i);
 
-#if G_ENABLE_DEBUG
+#ifdef G_ENABLE_DEBUG
       {
         guint size = uniform_sizes[info->format] * MAX (1, info->array_count);
         g_assert (info->format == 0 || info->offset + size <= state->uniform_data->len);
+        g_assert (!info->send_corners || info->changed);
       }
 #endif
 
