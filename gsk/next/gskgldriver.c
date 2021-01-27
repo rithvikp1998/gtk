@@ -249,6 +249,10 @@ gsk_next_driver_dispose (GObject *object)
       self->autorelease_framebuffers->len = 0;
     }
 
+  g_assert (!self->textures || g_hash_table_size (self->textures) == 0);
+  g_assert (!self->texture_id_to_key || g_hash_table_size (self->texture_id_to_key) == 0);
+  g_assert (!self->key_to_texture_id|| g_hash_table_size (self->key_to_texture_id) == 0);
+
   g_clear_object (&self->glyphs);
   g_clear_object (&self->icons);
   g_clear_object (&self->shadows);
@@ -280,7 +284,8 @@ static void
 gsk_next_driver_init (GskNextDriver *self)
 {
   self->autorelease_framebuffers = g_array_new (FALSE, FALSE, sizeof (guint));
-  self->textures = g_hash_table_new_full (NULL, NULL, NULL, gsk_gl_texture_free);
+  self->textures = g_hash_table_new_full (NULL, NULL, NULL,
+                                          (GDestroyNotify)gsk_gl_texture_free);
   self->texture_id_to_key = g_hash_table_new (NULL, NULL);
   self->key_to_texture_id = g_hash_table_new_full (texture_key_hash,
                                                    texture_key_equal,
