@@ -514,13 +514,14 @@ gsk_gl_uniform_state_set_rounded_rect (GskGLUniformState    *state,
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_ROUNDED_RECT, 1, location, &info)))
     {
-      if (!gsk_rounded_rect_equal (rounded_rect, u))
+      if (info->initial || !gsk_rounded_rect_equal (rounded_rect, u))
         {
           g_assert (!info->send_corners || info->changed);
 
           if (!info->send_corners)
             {
-              if (!graphene_size_equal (&u->corner[0], &rounded_rect->corner[0]) ||
+              if (info->initial ||
+                  !graphene_size_equal (&u->corner[0], &rounded_rect->corner[0]) ||
                   !graphene_size_equal (&u->corner[1], &rounded_rect->corner[1]) ||
                   !graphene_size_equal (&u->corner[2], &rounded_rect->corner[2]) ||
                   !graphene_size_equal (&u->corner[3], &rounded_rect->corner[3]))
