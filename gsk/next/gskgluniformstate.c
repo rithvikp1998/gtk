@@ -825,8 +825,11 @@ gsk_gl_uniform_state_end_frame (GskGLUniformState *state)
 
           alloc_uniform_data (buffer, size, &offset);
           memcpy (&buffer->data[offset], &state->uniform_data->data[info->offset], size);
-          info->changed = FALSE;
+
           info->offset = offset;
+          info->changed = FALSE;
+          info->initial = TRUE;
+          info->send_corners = FALSE;
         }
     }
 
