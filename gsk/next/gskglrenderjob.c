@@ -586,16 +586,17 @@ static void
 gsk_gl_render_job_push_clip (GskGLRenderJob       *job,
                              const GskRoundedRect *rect)
 {
-  GskGLRenderClip clip;
+  GskGLRenderClip *clip;
 
   g_assert (job != NULL);
   g_assert (job->clip != NULL);
   g_assert (rect != NULL);
 
-  clip.rect = *rect;
-  clip.is_rectilinear = gsk_rounded_rect_is_rectilinear (rect);
+  g_array_set_size (job->clip, job->clip->len + 1);
 
-  g_array_append_val (job->clip, clip);
+  clip = &g_array_index (job->clip, GskGLRenderClip, job->clip->len - 1);
+  memcpy (&clip->rect, rect, sizeof *rect);
+  clip->is_rectilinear = gsk_rounded_rect_is_rectilinear (rect);
 }
 
 static void
