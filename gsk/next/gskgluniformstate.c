@@ -136,7 +136,7 @@ gsk_gl_uniform_state_clear_program (GskGLUniformState *state,
 {
   ProgramInfo *program_info;
 
-  g_assert (state != NULL);
+  g_return_if_fail (state != NULL);
 
   if (program == 0 || program >= state->program_info->len)
     return;
@@ -281,7 +281,7 @@ gsk_gl_uniform_state_set1f (GskGLUniformState *state,
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_1F, 1, location, &info)))
     {
-      if (u->v0 != value0)
+      if (info->initial || u->v0 != value0)
         {
           REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_1F, 1);
           u->v0 = value0;
@@ -305,7 +305,7 @@ gsk_gl_uniform_state_set2f (GskGLUniformState *state,
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_2F, 1, location, &info)))
     {
-      if (u->v0 != value0 || u->v1 != value1)
+      if (info->initial || u->v0 != value0 || u->v1 != value1)
         {
           REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_2F, 1);
           u->v0 = value0;
@@ -331,7 +331,7 @@ gsk_gl_uniform_state_set3f (GskGLUniformState *state,
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_3F, 1, location, &info)))
     {
-      if (u->v0 != value0 || u->v1 != value1 || u->v2 != value2)
+      if (info->initial || u->v0 != value0 || u->v1 != value1 || u->v2 != value2)
         {
           REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_3F, 1);
           u->v0 = value0;
@@ -359,7 +359,7 @@ gsk_gl_uniform_state_set4f (GskGLUniformState *state,
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_4F, 1, location, &info)))
     {
-      if (u->v0 != value0 || u->v1 != value1 || u->v2 != value2 || u->v3 != value3)
+      if (info->initial || u->v0 != value0 || u->v1 != value1 || u->v2 != value2 || u->v3 != value3)
         {
           REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_4F, 1);
           u->v0 = value0;
@@ -385,7 +385,7 @@ gsk_gl_uniform_state_set1ui (GskGLUniformState *state,
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_1UI, 1, location, &info)))
     {
-      if (u->v0 != value0)
+      if (info->initial || u->v0 != value0)
         {
           REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_1UI, 1);
           u->v0 = value0;
@@ -408,7 +408,7 @@ gsk_gl_uniform_state_set1i (GskGLUniformState *state,
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_1I, 1, location, &info)))
     {
-      if (u->v0 != value0)
+      if (info->initial || u->v0 != value0)
         {
           REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_1I, 1);
           u->v0 = value0;
@@ -432,7 +432,7 @@ gsk_gl_uniform_state_set2i (GskGLUniformState *state,
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_2I, 1, location, &info)))
     {
-      if (u->v0 != value0 || u->v1 != value1)
+      if (info->initial || u->v0 != value0 || u->v1 != value1)
         {
           REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_2I, 1);
           u->v0 = value0;
@@ -458,7 +458,7 @@ gsk_gl_uniform_state_set3i (GskGLUniformState *state,
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_3I, 1, location, &info)))
     {
-      if (u->v0 != value0 || u->v1 != value1 || u->v2 != value2)
+      if (info->initial || u->v0 != value0 || u->v1 != value1 || u->v2 != value2)
         {
           REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_3I, 1);
           u->v0 = value0;
@@ -486,7 +486,7 @@ gsk_gl_uniform_state_set4i (GskGLUniformState *state,
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_4I, 1, location, &info)))
     {
-      if (u->v0 != value0 || u->v1 != value1 || u->v2 != value2 || u->v3 != value3)
+      if (info->initial || u->v0 != value0 || u->v1 != value1 || u->v2 != value2 || u->v3 != value3)
         {
           REPLACE_UNIFORM (info, u, GSK_GL_UNIFORM_FORMAT_4I, 1);
           u->v0 = value0;
