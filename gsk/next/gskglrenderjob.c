@@ -1304,7 +1304,7 @@ gsk_gl_render_job_visit_clipped_child (GskGLRenderJob        *job,
     {
       const GskRoundedRect *current_clip = gsk_gl_render_job_get_clip (job);
 
-      memset (&intersection, 0, sizeof intersection);
+      memset (&intersection.corner, 0, sizeof intersection.corner);
       graphene_rect_intersection (&transformed_clip,
                                   &current_clip->bounds,
                                   &intersection.bounds);
