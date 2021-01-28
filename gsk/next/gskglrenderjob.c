@@ -1183,6 +1183,11 @@ gsk_gl_render_job_visit_linear_gradient_node (GskGLRenderJob *job,
   const graphene_point_t *start = gsk_linear_gradient_node_get_start (node);
   const graphene_point_t *end = gsk_linear_gradient_node_get_end (node);
   int n_color_stops = gsk_linear_gradient_node_get_n_color_stops (node);
+  gboolean repeat = gsk_render_node_get_node_type (node) == GSK_REPEATING_LINEAR_GRADIENT_NODE;
+  float x1 = job->offset_x + start->x;
+  float x2 = job->offset_x + end->x;
+  float y1 = job->offset_y + start->y;
+  float y2 = job->offset_y + end->y;
 
   g_assert (n_color_stops < MAX_GRADIENT_STOPS);
 
@@ -1199,14 +1204,12 @@ gsk_gl_render_job_visit_linear_gradient_node (GskGLRenderJob *job,
                                  UNIFORM_LINEAR_GRADIENT_COLOR_STOPS,
                                  n_color_stops * 5,
                                  (const float *)stops);
-  gsk_gl_program_set_uniform2f (job->driver->linear_gradient,
-                                UNIFORM_LINEAR_GRADIENT_START_POINT,
-                                job->offset_x + start->x,
-                                job->offset_y + start->y);
-  gsk_gl_program_set_uniform2f (job->driver->linear_gradient,
-                                UNIFORM_LINEAR_GRADIENT_END_POINT,
-                                job->offset_x + end->x,
-                                job->offset_y + end->y);
+  gsk_gl_program_set_uniform4f (job->driver->linear_gradient,
+                                UNIFORM_LINEAR_GRADIENT_POINTS,
+                                x1, y1, x2 - x1, y2 - y1);
+  gsk_gl_program_set_uniform1i (job->driver->linear_gradient,
+                                UNIFORM_LINEAR_GRADIENT_REPEAT,
+                                repeat);
   gsk_gl_render_job_draw_rect (job, &node->bounds);
   gsk_gl_program_end_draw (job->driver->linear_gradient);
 }
@@ -1215,10 +1218,13 @@ static void
 gsk_gl_render_job_visit_conic_gradient_node (GskGLRenderJob *job,
                                              GskRenderNode  *node)
 {
+  static const float scale = 0.5f * M_1_PI;
+
   const GskColorStop *stops = gsk_conic_gradient_node_get_color_stops (node, NULL);
   const graphene_point_t *center = gsk_conic_gradient_node_get_center (node);
-  float rotation = gsk_conic_gradient_node_get_rotation (node);
   int n_color_stops = gsk_conic_gradient_node_get_n_color_stops (node);
+  float angle = gsk_conic_gradient_node_get_angle (node);
+  float bias = angle * scale + 2.0f;
 
   g_assert (n_color_stops < MAX_GRADIENT_STOPS);
 
@@ -1235,12 +1241,12 @@ gsk_gl_render_job_visit_conic_gradient_node (GskGLRenderJob *job,
                                  UNIFORM_CONIC_GRADIENT_COLOR_STOPS,
                                  n_color_stops * 5,
                                  (const float *)stops);
-  gsk_gl_program_set_uniform2f (job->driver->conic_gradient,
-                                UNIFORM_CONIC_GRADIENT_CENTER,
-                                center->x, center->y);
-  gsk_gl_program_set_uniform1f (job->driver->conic_gradient,
-                                UNIFORM_CONIC_GRADIENT_ROTATION,
-                                rotation);
+  gsk_gl_program_set_uniform4f (job->driver->conic_gradient,
+                                UNIFORM_CONIC_GRADIENT_GEOMETRY,
+                                job->offset_x + center->x,
+                                job->offset_y + center->y,
+                                scale,
+                                bias);
   gsk_gl_render_job_draw_rect (job, &node->bounds);
   gsk_gl_program_end_draw (job->driver->conic_gradient);
 }
@@ -1256,6 +1262,9 @@ gsk_gl_render_job_visit_radial_gradient_node (GskGLRenderJob *job,
   float end = gsk_radial_gradient_node_get_end (node);
   float hradius = gsk_radial_gradient_node_get_hradius (node);
   float vradius = gsk_radial_gradient_node_get_vradius (node);
+  gboolean repeat = gsk_render_node_get_node_type (node) == GSK_REPEATING_RADIAL_GRADIENT_NODE;
+  float scale = 1.0f / (end - start);
+  float bias = -start * scale;
 
   g_assert (n_color_stops < MAX_GRADIENT_STOPS);
 
@@ -1272,20 +1281,18 @@ gsk_gl_render_job_visit_radial_gradient_node (GskGLRenderJob *job,
                                  UNIFORM_RADIAL_GRADIENT_COLOR_STOPS,
                                  n_color_stops * 5,
                                  (const float *)stops);
-  gsk_gl_program_set_uniform1f (job->driver->radial_gradient,
-                                UNIFORM_RADIAL_GRADIENT_START,
-                                start);
-  gsk_gl_program_set_uniform1f (job->driver->radial_gradient,
-                                UNIFORM_RADIAL_GRADIENT_END,
-                                end);
+  gsk_gl_program_set_uniform1i (job->driver->radial_gradient,
+                                UNIFORM_RADIAL_GRADIENT_REPEAT,
+                                repeat);
   gsk_gl_program_set_uniform2f (job->driver->radial_gradient,
-                                UNIFORM_RADIAL_GRADIENT_RADIUS,
-                                job->scale_x * hradius,
-                                job->scale_y * vradius);
-  gsk_gl_program_set_uniform2f (job->driver->radial_gradient,
-                                UNIFORM_RADIAL_GRADIENT_CENTER,
+                                UNIFORM_RADIAL_GRADIENT_RANGE,
+                                scale, bias);
+  gsk_gl_program_set_uniform4f (job->driver->radial_gradient,
+                                UNIFORM_RADIAL_GRADIENT_GEOMETRY,
                                 job->offset_x + center->x,
-                                job->offset_y + center->y);
+                                job->offset_y + center->y,
+                                1.0f / (hradius * job->scale_x),
+                                1.0f / (vradius * job->scale_y));
   gsk_gl_render_job_draw_rect (job, &node->bounds);
   gsk_gl_program_end_draw (job->driver->radial_gradient);
 }
@@ -3295,6 +3302,7 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
     break;
 
     case GSK_LINEAR_GRADIENT_NODE:
+    case GSK_REPEATING_LINEAR_GRADIENT_NODE:
       if (gsk_linear_gradient_node_get_n_color_stops (node) < MAX_GRADIENT_STOPS)
         gsk_gl_render_job_visit_linear_gradient_node (job, node);
       else
@@ -3313,6 +3321,7 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
     break;
 
     case GSK_RADIAL_GRADIENT_NODE:
+    case GSK_REPEATING_RADIAL_GRADIENT_NODE:
       gsk_gl_render_job_visit_radial_gradient_node (job, node);
     break;
 
@@ -3343,8 +3352,6 @@ gsk_gl_render_job_visit_node (GskGLRenderJob *job,
       gsk_gl_render_job_visit_transform_node (job, node);
     break;
 
-    case GSK_REPEATING_LINEAR_GRADIENT_NODE:
-    case GSK_REPEATING_RADIAL_GRADIENT_NODE:
     case GSK_CAIRO_NODE:
       gsk_gl_render_job_visit_as_fallback (job, node);
     break;

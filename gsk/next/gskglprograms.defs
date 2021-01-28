@@ -36,8 +36,7 @@ GSK_GL_DEFINE_PROGRAM (conic_gradient,
                        "/org/gtk/libgsk/glsl/conic_gradient.glsl",
                        GSK_GL_ADD_UNIFORM (1, CONIC_GRADIENT_COLOR_STOPS, u_color_stops)
                        GSK_GL_ADD_UNIFORM (2, CONIC_GRADIENT_NUM_COLOR_STOPS, u_num_color_stops)
-                       GSK_GL_ADD_UNIFORM (3, CONIC_GRADIENT_CENTER, u_center)
-                       GSK_GL_ADD_UNIFORM (4, CONIC_GRADIENT_ROTATION, u_rotation))
+                       GSK_GL_ADD_UNIFORM (3, CONIC_GRADIENT_GEOMETRY, u_geometry))
 
 GSK_GL_DEFINE_PROGRAM (cross_fade,
                        "/org/gtk/libgsk/glsl/cross_fade.glsl",
@@ -55,8 +54,8 @@ GSK_GL_DEFINE_PROGRAM (linear_gradient,
                        "/org/gtk/libgsk/glsl/linear_gradient.glsl",
                        GSK_GL_ADD_UNIFORM (1, LINEAR_GRADIENT_COLOR_STOPS, u_color_stops)
                        GSK_GL_ADD_UNIFORM (2, LINEAR_GRADIENT_NUM_COLOR_STOPS, u_num_color_stops)
-                       GSK_GL_ADD_UNIFORM (3, LINEAR_GRADIENT_START_POINT, u_start_point)
-                       GSK_GL_ADD_UNIFORM (4, LINEAR_GRADIENT_END_POINT, u_end_point))
+                       GSK_GL_ADD_UNIFORM (3, LINEAR_GRADIENT_POINTS, u_points)
+                       GSK_GL_ADD_UNIFORM (4, LINEAR_GRADIENT_REPEAT, u_repeat))
 
 GSK_GL_DEFINE_PROGRAM (outset_shadow,
                        "/org/gtk/libgsk/glsl/outset_shadow.glsl",
@@ -67,10 +66,9 @@ GSK_GL_DEFINE_PROGRAM (radial_gradient,
                        "/org/gtk/libgsk/glsl/radial_gradient.glsl",
                        GSK_GL_ADD_UNIFORM (1, RADIAL_GRADIENT_COLOR_STOPS, u_color_stops)
                        GSK_GL_ADD_UNIFORM (2, RADIAL_GRADIENT_NUM_COLOR_STOPS, u_num_color_stops)
-                       GSK_GL_ADD_UNIFORM (3, RADIAL_GRADIENT_CENTER, u_center)
-                       GSK_GL_ADD_UNIFORM (4, RADIAL_GRADIENT_START, u_start)
-                       GSK_GL_ADD_UNIFORM (5, RADIAL_GRADIENT_END, u_end)
-                       GSK_GL_ADD_UNIFORM (6, RADIAL_GRADIENT_RADIUS, u_radius))
+                       GSK_GL_ADD_UNIFORM (3, RADIAL_GRADIENT_REPEAT, u_repeat)
+                       GSK_GL_ADD_UNIFORM (4, RADIAL_GRADIENT_RANGE, u_range)
+                       GSK_GL_ADD_UNIFORM (5, RADIAL_GRADIENT_GEOMETRY, u_geometry))
 
 GSK_GL_DEFINE_PROGRAM (repeat,
                        "/org/gtk/libgsk/glsl/repeat.glsl",
