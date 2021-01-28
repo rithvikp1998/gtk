@@ -3127,9 +3127,77 @@ gsk_gl_render_job_visit_texture_node (GskGLRenderJob *job,
     }
   else
     {
-#if 0
-      g_warning ("TODO: Slice too large texture\n");
-#endif
+      float min_x = job->offset_x + node->bounds.origin.x;
+      float min_y = job->offset_y + node->bounds.origin.y;
+      float max_x = min_x + node->bounds.size.width;
+      float max_y = min_y + node->bounds.size.height;
+      float scale_x = (max_x - min_x) / texture->width;
+      float scale_y = (max_y - min_y) / texture->height;
+      GskGLTextureSlice *slices;
+      guint n_slices;
+
+      gsk_next_driver_slice_texture (job->driver, texture, &slices, &n_slices);
+
+      for (guint i = 0; i < n_slices; i ++)
+        {
+          GskGLDrawVertex *vertices;
+          const GskGLTextureSlice *slice = &slices[i];
+          float x1, x2, y1, y2;
+
+          x1 = min_x + (scale_x * slice->rect.x);
+          x2 = x1 + (slice->rect.width * scale_x);
+          y1 = min_y + (scale_y * slice->rect.y);
+          y2 = y1 + (slice->rect.height * scale_y);
+
+          /* TODO: We could avoid some compares here if we make a fast
+           * begin_draw variant which doesn't take shared uniform changes.
+           */
+
+          gsk_gl_program_begin_draw (job->driver->blit,
+                                     &job->viewport,
+                                     &job->projection,
+                                     gsk_gl_render_job_get_modelview_matrix (job),
+                                     gsk_gl_render_job_get_clip (job),
+                                     job->alpha);
+          gsk_gl_program_set_uniform_texture (job->driver->blit,
+                                              UNIFORM_SHARED_SOURCE,
+                                              GL_TEXTURE_2D,
+                                              GL_TEXTURE0,
+                                              slice->texture_id);
+          vertices = gsk_gl_command_queue_add_vertices (job->command_queue, NULL);
+
+          vertices[0].position[0] = x1;
+          vertices[0].position[1] = y1;
+          vertices[0].uv[0] = 0;
+          vertices[0].uv[1] = 0;
+
+          vertices[1].position[0] = x1;
+          vertices[1].position[1] = y2;
+          vertices[1].uv[0] = 0;
+          vertices[1].uv[1] = 1;
+
+          vertices[2].position[0] = x2;
+          vertices[2].position[1] = y1;
+          vertices[2].uv[0] = 1;
+          vertices[2].uv[1] = 0;
+
+          vertices[3].position[0] = x2;
+          vertices[3].position[1] = y2;
+          vertices[3].uv[0] = 1;
+          vertices[3].uv[1] = 1;
+
+          vertices[4].position[0] = x1;
+          vertices[4].position[1] = y2;
+          vertices[4].uv[0] = 0;
+          vertices[4].uv[1] = 1;
+
+          vertices[5].position[0] = x2;
+          vertices[5].position[1] = y1;
+          vertices[5].uv[0] = 1;
+          vertices[5].uv[1] = 0;
+
+          gsk_gl_program_end_draw (job->driver->blit);
+        }
     }
 }
 
