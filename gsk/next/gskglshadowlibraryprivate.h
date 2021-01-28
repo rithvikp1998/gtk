@@ -25,17 +25,19 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GskGLShadowKey
-{
-  GskRoundedRect rounded_rect;
-  float blur_radius;
-} GskGLShadowKey;
-
 #define GSK_TYPE_GL_SHADOW_LIBRARY (gsk_gl_shadow_library_get_type())
 
-G_DECLARE_FINAL_TYPE (GskGLShadowLibrary, gsk_gl_shadow_library, GSK, GL_SHADOW_LIBRARY, GskGLTextureLibrary)
+G_DECLARE_FINAL_TYPE (GskGLShadowLibrary, gsk_gl_shadow_library, GSK, GL_SHADOW_LIBRARY, GObject)
 
-GskGLShadowLibrary *gsk_gl_shadow_library_new (GskNextDriver *driver);
+GskGLShadowLibrary *gsk_gl_shadow_library_new         (GskNextDriver        *driver);
+void                gsk_gl_shadow_library_begin_frame (GskGLShadowLibrary   *self);
+guint               gsk_gl_shadow_library_lookup      (GskGLShadowLibrary   *self,
+                                                       const GskRoundedRect *outline,
+                                                       float                 blur_radius);
+void                gsk_gl_shadow_library_insert      (GskGLShadowLibrary   *self,
+                                                       const GskRoundedRect *outline,
+                                                       float                 blur_radius,
+                                                       guint                 texture_id);
 
 G_END_DECLS
 

@@ -505,7 +505,7 @@ gsk_next_driver_begin_frame (GskNextDriver     *self,
 
   gsk_gl_texture_library_begin_frame (GSK_GL_TEXTURE_LIBRARY (self->icons));
   gsk_gl_texture_library_begin_frame (GSK_GL_TEXTURE_LIBRARY (self->glyphs));
-  gsk_gl_texture_library_begin_frame (GSK_GL_TEXTURE_LIBRARY (self->shadows));
+  gsk_gl_shadow_library_begin_frame (self->shadows);
 
   /* Remove all textures that are from a previous frame or are no
    * longer used by linked GdkTexture. We do this at the beginning
@@ -535,7 +535,6 @@ gsk_next_driver_end_frame (GskNextDriver *self)
 
   gsk_gl_texture_library_end_frame (GSK_GL_TEXTURE_LIBRARY (self->icons));
   gsk_gl_texture_library_end_frame (GSK_GL_TEXTURE_LIBRARY (self->glyphs));
-  gsk_gl_texture_library_end_frame (GSK_GL_TEXTURE_LIBRARY (self->shadows));
 
   while (self->render_targets->len > 0)
     {
@@ -1245,4 +1244,32 @@ gsk_next_driver_slice_texture (GskNextDriver      *self,
 
   t->slices = *out_slices = slices;
   t->n_slices = *out_n_slices = n_slices;
+}
+
+void
+gsk_next_driver_mark_texture_permanent (GskNextDriver *self,
+                                        guint          texture_id)
+{
+  GskGLTexture *t;
+
+  g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
+  g_return_if_fail (texture_id > 0);
+
+  if ((t = g_hash_table_lookup (self->textures, GUINT_TO_POINTER (texture_id))))
+    t->permanent = TRUE;
+}
+
+void
+gsk_next_driver_release_texture_by_id (GskNextDriver *self,
+                                       guint          texture_id)
+{
+  GskGLTexture *texture;
+
+  g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
+  g_return_if_fail (texture_id > 0);
+
+  if ((texture = g_hash_table_lookup (self->textures, GUINT_TO_POINTER (texture_id))))
+    gsk_next_driver_release_texture (self, texture);
+  else
+    remove_texture_key_for_id (self, texture_id);
 }
