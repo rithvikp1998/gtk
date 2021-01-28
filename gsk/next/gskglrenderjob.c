@@ -253,6 +253,19 @@ color_matrix_modifies_alpha (GskRenderNode *node)
   return !graphene_vec4_equal (graphene_vec4_w_axis (), &row3);
 }
 
+static inline gboolean G_GNUC_PURE
+rect_contains_rect (const graphene_rect_t *r1,
+                    const graphene_rect_t *r2)
+{
+  if (r2->origin.x >= r1->origin.x &&
+      (r2->origin.x + r2->size.width) <= (r1->origin.x + r1->size.width) &&
+      r2->origin.y >= r1->origin.y &&
+      (r2->origin.y + r2->size.height) <= (r1->origin.y + r1->size.height))
+    return TRUE;
+  else
+    return FALSE;
+}
+
 static inline gboolean
 rounded_inner_rect_contains_rect (const GskRoundedRect  *rounded,
                                   const graphene_rect_t *rect)
@@ -280,7 +293,7 @@ rounded_inner_rect_contains_rect (const GskRoundedRect  *rounded,
                       MAX (rounded->corner[GSK_CORNER_BOTTOM_LEFT].height,
                            rounded->corner[GSK_CORNER_BOTTOM_RIGHT].height);
 
-  return graphene_rect_contains_rect (&inner, rect);
+  return rect_contains_rect (&inner, rect);
 }
 
 static inline gboolean G_GNUC_PURE
@@ -296,19 +309,6 @@ rect_intersects (const graphene_rect_t *r1,
     return FALSE;
   else
     return TRUE;
-}
-
-static inline gboolean G_GNUC_PURE
-rect_contains_rect (const graphene_rect_t *r1,
-                    const graphene_rect_t *r2)
-{
-  if (r2->origin.x >= r1->origin.x &&
-      (r2->origin.x + r2->size.width) <= (r1->origin.x + r1->size.width) &&
-      r2->origin.y >= r1->origin.y &&
-      (r2->origin.y + r2->size.height) <= (r1->origin.y + r1->size.height))
-    return TRUE;
-  else
-    return FALSE;
 }
 
 static inline gboolean
@@ -3154,7 +3154,7 @@ gsk_gl_render_job_visit_repeat_node (GskGLRenderJob *job,
   /* If the size of the repeat node is smaller than the size of the
    * child node, we don't repeat at all and can just draw that part
    * of the child texture... */
-  if (graphene_rect_contains_rect (child_bounds, &node->bounds))
+  if (rect_contains_rect (child_bounds, &node->bounds))
     {
       gsk_gl_render_job_visit_clipped_child (job, child, child_bounds);
       return;
