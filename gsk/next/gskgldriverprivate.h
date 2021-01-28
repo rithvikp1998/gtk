@@ -158,7 +158,7 @@ void               gsk_next_driver_release_texture       (GskNextDriver        *
                                                           GskGLTexture         *texture);
 void               gsk_next_driver_release_texture_by_id (GskNextDriver        *self,
                                                           guint                 texture_id);
-void               gsk_next_driver_mark_texture_permanent(GskNextDriver        *self,
+GskGLTexture      *gsk_next_driver_mark_texture_permanent(GskNextDriver        *self,
                                                           guint                 texture_id);
 void               gsk_next_driver_slice_texture         (GskNextDriver        *self,
                                                           GdkTexture           *texture,

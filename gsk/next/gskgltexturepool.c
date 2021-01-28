@@ -31,6 +31,11 @@ gsk_gl_texture_free (GskGLTexture *texture)
 {
   if (texture != NULL)
     {
+      g_return_if_fail (texture->width_link.prev == NULL);
+      g_return_if_fail (texture->width_link.next == NULL);
+      g_return_if_fail (texture->height_link.prev == NULL);
+      g_return_if_fail (texture->height_link.next == NULL);
+
       if (texture->user)
         g_clear_pointer (&texture->user, gdk_texture_clear_render_data);
 
@@ -83,12 +88,19 @@ gsk_gl_texture_pool_put (GskGLTexturePool *self,
 
   g_return_if_fail (self != NULL);
   g_return_if_fail (texture != NULL);
+  g_return_if_fail (texture->user == NULL);
   g_return_if_fail (texture->width_link.prev == NULL);
   g_return_if_fail (texture->width_link.next == NULL);
   g_return_if_fail (texture->width_link.data == texture);
   g_return_if_fail (texture->height_link.prev == NULL);
   g_return_if_fail (texture->height_link.next == NULL);
   g_return_if_fail (texture->height_link.data == texture);
+
+  if (texture->permanent)
+    {
+      gsk_gl_texture_free (texture);
+      return;
+    }
 
   sibling = NULL;
   for (GList *iter = self->by_width.head;

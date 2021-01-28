@@ -871,13 +871,17 @@ void
 gsk_next_driver_release_texture (GskNextDriver *self,
                                  GskGLTexture  *texture)
 {
+  guint texture_id;
+
   g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
   g_return_if_fail (texture != NULL);
 
-  g_hash_table_remove (self->textures,
-                       GUINT_TO_POINTER (texture->texture_id));
-  remove_texture_key_for_id (self, texture->texture_id);
+  texture_id = texture->texture_id;
 
+  if (texture_id > 0)
+    remove_texture_key_for_id (self, texture_id);
+
+  g_hash_table_steal (self->textures, GUINT_TO_POINTER (texture_id));
   gsk_gl_texture_pool_put (&self->texture_pool, texture);
 }
 
@@ -1246,17 +1250,19 @@ gsk_next_driver_slice_texture (GskNextDriver      *self,
   t->n_slices = *out_n_slices = n_slices;
 }
 
-void
+GskGLTexture *
 gsk_next_driver_mark_texture_permanent (GskNextDriver *self,
                                         guint          texture_id)
 {
   GskGLTexture *t;
 
-  g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
-  g_return_if_fail (texture_id > 0);
+  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), NULL);
+  g_return_val_if_fail (texture_id > 0, NULL);
 
   if ((t = g_hash_table_lookup (self->textures, GUINT_TO_POINTER (texture_id))))
     t->permanent = TRUE;
+
+  return t;
 }
 
 void
@@ -1268,8 +1274,8 @@ gsk_next_driver_release_texture_by_id (GskNextDriver *self,
   g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
   g_return_if_fail (texture_id > 0);
 
+  remove_texture_key_for_id (self, texture_id);
+
   if ((texture = g_hash_table_lookup (self->textures, GUINT_TO_POINTER (texture_id))))
     gsk_next_driver_release_texture (self, texture);
-  else
-    remove_texture_key_for_id (self, texture_id);
 }
