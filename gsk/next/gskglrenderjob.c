@@ -2103,17 +2103,21 @@ static void
 gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
                                                     GskRenderNode  *node)
 {
+  static const GdkRGBA white = { 1, 1, 1, 1 };
+
   const GskRoundedRect *outline = gsk_outset_shadow_node_get_outline (node);
   const GdkRGBA *color = gsk_outset_shadow_node_get_color (node);
-  const float scale_x = job->scale_x;
-  const float scale_y = job->scale_y;
-  const float blur_radius = gsk_outset_shadow_node_get_blur_radius (node);
-  const float blur_extra = blur_radius * 2.0f; /* 2.0 = shader radius_multiplier */
-  const int extra_blur_pixels = (int) ceilf(blur_extra / 2.0 * MAX (scale_x, scale_y)); /* TODO: No need to MAX() here actually */
-  const float spread = gsk_outset_shadow_node_get_spread (node);
-  const float dx = gsk_outset_shadow_node_get_dx (node);
-  const float dy = gsk_outset_shadow_node_get_dy (node);
+  float scale_x = job->scale_x;
+  float scale_y = job->scale_y;
+  float blur_radius = gsk_outset_shadow_node_get_blur_radius (node);
+  float blur_extra = blur_radius * 2.0f; /* 2.0 = shader radius_multiplier */
+  float half_blur_extra = blur_extra / 2.0f;
+  int extra_blur_pixels = ceilf (blur_extra / 2.0 * scale_x);
+  float spread = gsk_outset_shadow_node_get_spread (node);
+  float dx = gsk_outset_shadow_node_get_dx (node);
+  float dy = gsk_outset_shadow_node_get_dy (node);
   GskRoundedRect scaled_outline;
+  GskGLRenderOffscreen offscreen = {0};
   int texture_width, texture_height;
   int blurred_texture_id;
   int cached_tid;
@@ -2126,7 +2130,7 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
   if (outline->bounds.size.width < blur_extra ||
       outline->bounds.size.height < blur_extra)
     {
-      do_slicing = false;
+      do_slicing = FALSE;
       gsk_rounded_rect_shrink (&scaled_outline, -spread, -spread, -spread, -spread);
     }
   else
@@ -2136,119 +2140,151 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
       /* Increase by the spread */
       gsk_rounded_rect_shrink (&scaled_outline, -spread, -spread, -spread, -spread);
       /* Grow bounds but don't grow corners */
-      graphene_rect_inset (&scaled_outline.bounds, - blur_extra / 2.0, - blur_extra / 2.0);
+      graphene_rect_inset (&scaled_outline.bounds, -half_blur_extra, -half_blur_extra);
       /* For the center part, we add a few pixels */
       scaled_outline.bounds.size.width += SHADOW_EXTRA_SIZE;
       scaled_outline.bounds.size.height += SHADOW_EXTRA_SIZE;
 
-      do_slicing = true;
+      do_slicing = TRUE;
     }
 
-  texture_width  = (int)ceil ((scaled_outline.bounds.size.width  + blur_extra) * scale_x);
-  texture_height = (int)ceil ((scaled_outline.bounds.size.height + blur_extra) * scale_y);
+  texture_width = ceil ((scaled_outline.bounds.size.width + blur_extra) * scale_x);
+  texture_height = ceil ((scaled_outline.bounds.size.height + blur_extra) * scale_y);
 
   scaled_outline.bounds.origin.x = extra_blur_pixels;
   scaled_outline.bounds.origin.y = extra_blur_pixels;
   scaled_outline.bounds.size.width = texture_width - (extra_blur_pixels * 2);
   scaled_outline.bounds.size.height = texture_height - (extra_blur_pixels * 2);
 
-  for (guint i = 0; i < 4; i ++)
+  for (guint i = 0; i < G_N_ELEMENTS (scaled_outline.corner); i++)
     {
       scaled_outline.corner[i].width *= scale_x;
       scaled_outline.corner[i].height *= scale_y;
     }
 
-#if 0
-  cached_tid = gsk_gl_shadow_library_get_texture_id (job->driver->shadows,
-                                                     &scaled_outline,
-                                                     blur_radius);
-
+  cached_tid = gsk_gl_shadow_library_lookup (job->driver->shadows, &scaled_outline, blur_radius);
 
   if (cached_tid == 0)
     {
-      int texture_id, render_target;
-      int prev_render_target;
-      graphene_matrix_t prev_projection;
-      graphene_rect_t prev_viewport;
-      graphene_matrix_t item_proj;
+      GdkGLContext *context = job->command_queue->context;
+      GskGLRenderTarget *render_target;
+      GskGLRenderState state;
 
-      gsk_gl_driver_create_render_target (self->gl_driver,
-                                          texture_width, texture_height,
-                                          GL_NEAREST, GL_NEAREST,
-                                          &texture_id, &render_target);
-      if (gdk_gl_context_has_debug (self->gl_context))
+      gsk_next_driver_create_render_target (job->driver,
+                                            texture_width, texture_height,
+                                            GL_NEAREST, GL_NEAREST,
+                                            &render_target);
+
+      if (gdk_gl_context_has_debug (context))
         {
-          gdk_gl_context_label_object_printf (self->gl_context, GL_TEXTURE, texture_id,
-                                              "Outset Shadow Temp %d", texture_id);
-          gdk_gl_context_label_object_printf  (self->gl_context, GL_FRAMEBUFFER, render_target,
-                                               "Outset Shadow FB Temp %d", render_target);
+          gdk_gl_context_label_object_printf (context,
+                                              GL_TEXTURE,
+                                              render_target->texture_id,
+                                              "Outset Shadow Temp %d",
+                                              render_target->texture_id);
+          gdk_gl_context_label_object_printf  (context,
+                                               GL_FRAMEBUFFER,
+                                               render_target->framebuffer_id,
+                                               "Outset Shadow FB Temp %d",
+                                               render_target->framebuffer_id);
         }
 
-      ops_set_program (builder, &self->programs->color_program);
-      init_projection_matrix (&item_proj,
+      /* Change state for offscreen */
+      gsk_gl_render_state_save (&state, job);
+      init_projection_matrix (&job->projection,
                               &GRAPHENE_RECT_INIT (0, 0, texture_width, texture_height));
+      job->viewport = GRAPHENE_RECT_INIT (0, 0, texture_width, texture_height);
+      gsk_gl_render_job_set_modelview (job, NULL);
+      gsk_gl_render_job_push_clip (job, &scaled_outline);
 
-      prev_render_target = ops_set_render_target (builder, render_target);
-      ops_begin (builder, OP_CLEAR);
-      prev_projection = ops_set_projection (builder, &item_proj);
-      ops_set_modelview (builder, NULL);
-      prev_viewport = ops_set_viewport (builder, &GRAPHENE_RECT_INIT (0, 0, texture_width, texture_height));
+      /* Bind render target and clear it */
+      gsk_gl_command_queue_bind_framebuffer (job->command_queue,
+                                             render_target->framebuffer_id);
+      gsk_gl_command_queue_clear (job->command_queue, 0, &job->viewport);
 
-      /* Draw outline */
-      ops_push_clip (builder, &scaled_outline);
-      ops_set_color (builder, &COLOR_WHITE);
-      load_float_vertex_data (ops_draw (builder, NULL), builder,
-                              0, 0, texture_width, texture_height);
+      /* Draw using coloring program the outline */
+      gsk_gl_program_begin_draw (job->driver->color,
+                                 &job->viewport,
+                                 &job->projection,
+                                 gsk_gl_render_job_get_modelview_matrix (job),
+                                 gsk_gl_render_job_get_clip (job),
+                                 job->alpha);
+      gsk_gl_program_set_uniform_color (job->driver->color,
+                                        UNIFORM_COLOR_COLOR,
+                                        &white);
+      gsk_gl_render_job_draw (job, 0, 0, texture_width, texture_height);
+      gsk_gl_program_end_draw (job->driver->color);
 
-      ops_pop_clip (builder);
-      ops_set_viewport (builder, &prev_viewport);
-      ops_pop_modelview (builder);
-      ops_set_projection (builder, &prev_projection);
-      ops_set_render_target (builder, prev_render_target);
+      /* Reset state from offscreen */
+      gsk_gl_render_job_pop_clip (job);
+      gsk_gl_render_job_pop_modelview (job);
+      gsk_gl_render_state_restore (&state, job);
 
       /* Now blur the outline */
-      blurred_texture_id = blur_texture (self, builder,
-                                         &(TextureRegion) { texture_id, 0, 0, 1, 1 },
-                                         texture_width,
-                                         texture_height,
-                                         blur_radius * scale_x,
-                                         blur_radius * scale_y);
+      offscreen.texture_id = gsk_next_driver_release_render_target (job->driver, render_target, FALSE);
+      offscreen.area = GRAPHENE_RECT_INIT (0, 0, 1, 1);
+      blurred_texture_id = blur_offscreen (job,
+                                           &offscreen,
+                                           texture_width,
+                                           texture_height,
+                                           blur_radius * scale_x,
+                                           blur_radius * scale_y);
 
-      gsk_gl_driver_mark_texture_permanent (self->gl_driver, blurred_texture_id);
-      gsk_gl_shadow_cache_commit (&self->shadow_cache,
-                                  &scaled_outline,
-                                  blur_radius,
-                                  blurred_texture_id);
+      gsk_gl_shadow_library_insert (job->driver->shadows,
+                                    &scaled_outline,
+                                    blur_radius,
+                                    blurred_texture_id);
     }
   else
     {
       blurred_texture_id = cached_tid;
     }
 
-
   if (!do_slicing)
     {
-      const float min_x = floorf (outline->bounds.origin.x - spread - (blur_extra / 2.0) + dx);
-      const float min_y = floorf (outline->bounds.origin.y - spread - (blur_extra / 2.0) + dy);
+      float min_x = floorf (outline->bounds.origin.x - spread - half_blur_extra + dx);
+      float min_y = floorf (outline->bounds.origin.y - spread - half_blur_extra + dy);
+      GskRoundedRect transformed_outline;
 
-      ops_set_program (builder, &self->programs->outset_shadow_program);
-      ops_set_color (builder, color);
-      ops_set_texture (builder, blurred_texture_id);
+      gsk_gl_render_job_transform_rounded_rect (job, outline, &transformed_outline);
 
-      shadow = ops_begin (builder, OP_CHANGE_OUTSET_SHADOW);
-      shadow->outline.value = transform_rect (self, builder, outline);
-      shadow->outline.send = TRUE;
+      gsk_gl_program_begin_draw (job->driver->outset_shadow,
+                                 &job->viewport,
+                                 &job->projection,
+                                 gsk_gl_render_job_get_modelview_matrix (job),
+                                 gsk_gl_render_job_get_clip (job),
+                                 job->alpha);
+      gsk_gl_program_set_uniform_color (job->driver->outset_shadow,
+                                        UNIFORM_OUTSET_SHADOW_COLOR,
+                                        color);
+      gsk_gl_program_set_uniform_texture (job->driver->outset_shadow,
+                                          UNIFORM_SHARED_SOURCE,
+                                          GL_TEXTURE_2D,
+                                          GL_TEXTURE0,
+                                          blurred_texture_id);
+      gsk_gl_program_set_uniform_rounded_rect (job->driver->outset_shadow,
+                                               UNIFORM_OUTSET_SHADOW_OUTLINE_RECT,
+                                               &transformed_outline);
+      gsk_gl_program_end_draw (job->driver->outset_shadow);
 
-      load_vertex_data_with_region (ops_draw (builder, NULL),
-                                    &GRAPHENE_RECT_INIT (
-                                      min_x, min_y,
-                                      texture_width / scale_x, texture_height / scale_y
-                                    ), builder,
-                                    &(TextureRegion) { 0, 0, 0, 1, 1 },
-                                    FALSE);
+      offscreen.was_offscreen = FALSE;
+      offscreen.texture_id = blurred_texture_id;
+      offscreen.area.origin.x = 0;
+      offscreen.area.origin.y = 0;
+      offscreen.area.size.width = 1;
+      offscreen.area.size.height = 1;
+
+      gsk_gl_render_job_load_vertices_from_offscreen (job,
+                                                      &GRAPHENE_RECT_INIT (min_x,
+                                                                           min_y,
+                                                                           texture_width / scale_x,
+                                                                           texture_height / scale_y),
+                                                      &offscreen);
+
       return;
     }
 
+#if 0
 
   ops_set_program (builder, &self->programs->outset_shadow_program);
   ops_set_color (builder, color);
