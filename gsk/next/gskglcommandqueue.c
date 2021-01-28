@@ -914,9 +914,15 @@ gsk_gl_command_queue_end_frame (GskGLCommandQueue *self)
    */
   for (guint i = 0; i < G_N_ELEMENTS (self->attachments->textures); i++)
     {
-      glActiveTexture (GL_TEXTURE0 + i);
-      glBindTexture (GL_TEXTURE_2D, 0);
-      self->attachments->textures[i].id = 0;
+      if (self->attachments->textures[i].id != 0)
+        {
+          glActiveTexture (GL_TEXTURE0 + i);
+          glBindTexture (GL_TEXTURE_2D, 0);
+
+          self->attachments->textures[i].id = 0;
+          self->attachments->textures[i].changed = FALSE;
+          self->attachments->textures[i].initial = TRUE;
+        }
     }
 
   g_string_chunk_clear (self->debug_groups);
