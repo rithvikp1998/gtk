@@ -95,6 +95,7 @@ remove_texture_key_for_id (GskNextDriver *self,
   g_assert (GSK_IS_NEXT_DRIVER (self));
   g_assert (texture_id > 0);
 
+  /* g_hash_table_remove() will cause @key to be freed */
   if (g_hash_table_steal_extended (self->texture_id_to_key,
                                    GUINT_TO_POINTER (texture_id),
                                    NULL,
@@ -131,8 +132,18 @@ gsk_next_driver_collect_unused_textures (GskNextDriver *self,
 
       if (t->last_used_in_frame < watermark)
         {
+          g_hash_table_iter_steal (&iter);
+
+          g_assert (t->width_link.prev == NULL);
+          g_assert (t->width_link.next == NULL);
+          g_assert (t->width_link.data == t);
+          g_assert (t->height_link.prev == NULL);
+          g_assert (t->height_link.next == NULL);
+          g_assert (t->height_link.data == t);
+
+          /* Steal this texture and put it back into the pool */
           remove_texture_key_for_id (self, t->texture_id);
-          g_hash_table_iter_remove (&iter);
+          gsk_gl_texture_pool_put (&self->texture_pool, t);
         }
     }
 

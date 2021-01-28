@@ -71,11 +71,18 @@ void
 gsk_gl_texture_pool_put (GskGLTexturePool *self,
                          GskGLTexture     *texture)
 {
-  GList *sibling = NULL;
+  GList *sibling;
 
   g_return_if_fail (self != NULL);
   g_return_if_fail (texture != NULL);
+  g_return_if_fail (texture->width_link.prev == NULL);
+  g_return_if_fail (texture->width_link.next == NULL);
+  g_return_if_fail (texture->width_link.data == texture);
+  g_return_if_fail (texture->height_link.prev == NULL);
+  g_return_if_fail (texture->height_link.next == NULL);
+  g_return_if_fail (texture->height_link.data == texture);
 
+  sibling = NULL;
   for (GList *iter = self->by_width.head;
        iter != NULL;
        iter = iter->next)
@@ -92,7 +99,8 @@ gsk_gl_texture_pool_put (GskGLTexturePool *self,
 
   g_queue_insert_after_link (&self->by_width, sibling, &texture->width_link);
 
-  for (GList *iter = self->by_width.head;
+  sibling = NULL;
+  for (GList *iter = self->by_height.head;
        iter != NULL;
        iter = iter->next)
     {
@@ -106,7 +114,7 @@ gsk_gl_texture_pool_put (GskGLTexturePool *self,
       sibling = iter;
     }
 
-  g_queue_insert_after_link (&self->by_width, sibling, &texture->width_link);
+  g_queue_insert_after_link (&self->by_height, sibling, &texture->height_link);
 }
 
 GskGLTexture *
