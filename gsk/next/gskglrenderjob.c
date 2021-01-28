@@ -1483,7 +1483,7 @@ gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
                                           GL_TEXTURE_2D,
                                           GL_TEXTURE0,
                                           offscreen.texture_id);
-      gsk_gl_render_job_draw_offscreen_rect (job, &node->bounds);
+      gsk_gl_render_job_load_vertices_from_offscreen (job, &node->bounds, &offscreen);
       gsk_gl_program_end_draw (job->driver->blit);
     }
 }
