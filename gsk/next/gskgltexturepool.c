@@ -25,6 +25,7 @@
 #include <gdk/gdktextureprivate.h>
 
 #include "gskgltexturepoolprivate.h"
+#include "ninesliceprivate.h"
 
 void
 gsk_gl_texture_free (GskGLTexture *texture)
@@ -52,6 +53,7 @@ gsk_gl_texture_free (GskGLTexture *texture)
         }
 
       g_clear_pointer (&texture->slices, g_free);
+      g_clear_pointer (&texture->nine_slice, g_free);
 
       g_slice_free (GskGLTexture, texture);
     }
@@ -241,4 +243,24 @@ gsk_gl_texture_new (guint  texture_id,
   texture->last_used_in_frame = frame_id;
 
   return texture;
+}
+
+const GskGLTextureNineSlice *
+gsk_gl_texture_get_nine_slice (GskGLTexture         *texture,
+                               const GskRoundedRect *outline,
+                               float                 extra_pixels)
+{
+  g_return_val_if_fail (texture != NULL, NULL);
+  g_return_val_if_fail (outline != NULL, NULL);
+
+  if G_UNLIKELY (texture->nine_slice == NULL)
+    {
+      texture->nine_slice = g_new0 (GskGLTextureNineSlice, 9);
+
+      nine_slice_rounded_rect (texture->nine_slice, outline);
+      nine_slice_grow (texture->nine_slice, extra_pixels);
+      nine_slice_to_texture_coords (texture->nine_slice, texture->width, texture->height);
+    }
+
+  return texture->nine_slice;
 }

@@ -37,51 +37,63 @@ struct _GskGLTextureSlice
   guint texture_id;
 };
 
+struct _GskGLTextureNineSlice
+{
+  cairo_rectangle_int_t rect;
+  graphene_rect_t area;
+};
+
 struct _GskGLTexture
 {
   /* Used to sort by width/height in pool */
-  GList              width_link;
-  GList              height_link;
+  GList width_link;
+  GList height_link;
 
   /* Identifier of the frame that created it */
-  gint64             last_used_in_frame;
+  gint64 last_used_in_frame;
 
   /* Backpointer to texture (can be cleared asynchronously) */
-  GdkTexture        *user;
+  GdkTexture *user;
 
   /* Only used by sliced textures */
   GskGLTextureSlice *slices;
-  guint              n_slices;
+  guint n_slices;
+
+  /* Only used by nine-slice textures */
+  GskGLTextureNineSlice *nine_slice;
 
   /* The actual GL texture identifier in some shared context */
-  guint              texture_id;
+  guint texture_id;
 
-  float              width;
-  float              height;
-  int                min_filter;
-  int                mag_filter;
+  float width;
+  float height;
+  int min_filter;
+  int mag_filter;
 
   /* Set when used by an atlas so we don't drop the texture */
   guint              permanent : 1;
 };
 
-void          gsk_gl_texture_pool_init  (GskGLTexturePool *self);
-void          gsk_gl_texture_pool_clear (GskGLTexturePool *self);
-GskGLTexture *gsk_gl_texture_pool_get   (GskGLTexturePool *self,
-                                         float             width,
-                                         float             height,
-                                         int               min_filter,
-                                         int               mag_filter,
-                                         gboolean          always_create);
-void          gsk_gl_texture_pool_put   (GskGLTexturePool *self,
-                                         GskGLTexture     *texture);
-GskGLTexture *gsk_gl_texture_new        (guint             texture_id,
-                                         int               width,
-                                         int               height,
-                                         int               min_filter,
-                                         int               mag_filter,
-                                         gint64            frame_id);
-void          gsk_gl_texture_free       (GskGLTexture     *texture);
+void                         gsk_gl_texture_pool_init      (GskGLTexturePool *self);
+void                         gsk_gl_texture_pool_clear     (GskGLTexturePool *self);
+GskGLTexture                *gsk_gl_texture_pool_get       (GskGLTexturePool *self,
+                                                            float             width,
+                                                            float             height,
+                                                            int               min_filter,
+                                                            int               mag_filter,
+                                                            gboolean          always_create);
+void                         gsk_gl_texture_pool_put       (GskGLTexturePool *self,
+                                                            GskGLTexture     *texture);
+GskGLTexture                *gsk_gl_texture_new            (guint             texture_id,
+                                                            int               width,
+                                                            int               height,
+                                                            int               min_filter,
+                                                            int               mag_filter,
+                                                            gint64            frame_id);
+const GskGLTextureNineSlice *gsk_gl_texture_get_nine_slice (GskGLTexture         *texture,
+                                                            const GskRoundedRect *outline,
+                                                            float                 extra_pixels);
+void                         gsk_gl_texture_free           (GskGLTexture     *texture);
 
 G_END_DECLS
 

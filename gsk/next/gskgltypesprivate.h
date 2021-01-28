@@ -45,6 +45,7 @@ typedef struct _GskGLTexture GskGLTexture;
 typedef struct _GskGLTextureSlice GskGLTextureSlice;
 typedef struct _GskGLTextureAtlas GskGLTextureAtlas;
 typedef struct _GskGLTextureLibrary GskGLTextureLibrary;
+typedef struct _GskGLTextureNineSlice GskGLTextureNineSlice;
 typedef struct _GskGLUniformState GskGLUniformState;
 typedef struct _GskNextDriver GskNextDriver;
 
