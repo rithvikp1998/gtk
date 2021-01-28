@@ -2117,6 +2117,7 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
   float dx = gsk_outset_shadow_node_get_dx (node);
   float dy = gsk_outset_shadow_node_get_dy (node);
   GskRoundedRect scaled_outline;
+  GskRoundedRect transformed_outline;
   GskGLRenderOffscreen offscreen = {0};
   int texture_width, texture_height;
   int blurred_texture_id;
@@ -2240,13 +2241,17 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
       blurred_texture_id = cached_tid;
     }
 
+  gsk_gl_render_job_transform_rounded_rect (job, outline, &transformed_outline);
+
   if (!do_slicing)
     {
       float min_x = floorf (outline->bounds.origin.x - spread - half_blur_extra + dx);
       float min_y = floorf (outline->bounds.origin.y - spread - half_blur_extra + dy);
-      GskRoundedRect transformed_outline;
 
-      gsk_gl_render_job_transform_rounded_rect (job, outline, &transformed_outline);
+      offscreen.was_offscreen = FALSE;
+      offscreen.texture_id = blurred_texture_id;
+      offscreen.area.origin.x = offscreen.area.origin.y = 0;
+      offscreen.area.size.width = offscreen.area.size.height = 1;
 
       gsk_gl_program_begin_draw (job->driver->outset_shadow,
                                  &job->viewport,
@@ -2265,21 +2270,13 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
       gsk_gl_program_set_uniform_rounded_rect (job->driver->outset_shadow,
                                                UNIFORM_OUTSET_SHADOW_OUTLINE_RECT,
                                                &transformed_outline);
-      gsk_gl_program_end_draw (job->driver->outset_shadow);
-
-      offscreen.was_offscreen = FALSE;
-      offscreen.texture_id = blurred_texture_id;
-      offscreen.area.origin.x = 0;
-      offscreen.area.origin.y = 0;
-      offscreen.area.size.width = 1;
-      offscreen.area.size.height = 1;
-
       gsk_gl_render_job_load_vertices_from_offscreen (job,
                                                       &GRAPHENE_RECT_INIT (min_x,
                                                                            min_y,
                                                                            texture_width / scale_x,
                                                                            texture_height / scale_y),
                                                       &offscreen);
+      gsk_gl_program_end_draw (job->driver->outset_shadow);
 
       return;
     }
