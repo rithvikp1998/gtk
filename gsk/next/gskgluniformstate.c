@@ -81,6 +81,24 @@ typedef struct
   guint   n_changed;
 } ProgramInfo;
 
+static inline gboolean
+rounded_rect_equal (const GskRoundedRect *r1,
+                    const GskRoundedRect *r2)
+{
+  /* Ensure we're dealing with tightly packed floats that
+   * should allow us to compare without any gaps using memcmp().
+   */
+  G_STATIC_ASSERT (sizeof *r1 == (sizeof (float) * 12));
+
+  if (r1 == r2)
+    return TRUE;
+
+  if (r1 == NULL)
+    return FALSE;
+
+  return memcmp (r1, r2, sizeof *r1) == 0;
+}
+
 GskGLUniformState *
 gsk_gl_uniform_state_new (void)
 {
@@ -514,7 +532,7 @@ gsk_gl_uniform_state_set_rounded_rect (GskGLUniformState    *state,
 
   if ((u = get_uniform (state, program, GSK_GL_UNIFORM_FORMAT_ROUNDED_RECT, 1, location, &info)))
     {
-      if (info->initial || !gsk_rounded_rect_equal (rounded_rect, u))
+      if (info->initial || !rounded_rect_equal (rounded_rect, u))
         {
           g_assert (!info->send_corners || info->changed);
 
