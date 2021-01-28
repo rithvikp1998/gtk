@@ -1162,3 +1162,87 @@ gsk_next_driver_create_command_queue (GskNextDriver *self,
 
   return gsk_gl_command_queue_new (context, self->shared_command_queue->uniforms);
 }
+
+void
+gsk_next_driver_slice_texture (GskNextDriver      *self,
+                               GdkTexture         *texture,
+                               GskGLTextureSlice **out_slices,
+                               guint              *out_n_slices)
+{
+  int max_texture_size;
+  GskGLTextureSlice *slices;
+  GskGLTexture *t;
+  guint n_slices;
+  guint cols;
+  guint rows;
+  int tex_width;
+  int tex_height;
+  int x = 0, y = 0;
+
+  g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
+  g_return_if_fail (GDK_IS_TEXTURE (texture));
+  g_return_if_fail (out_slices != NULL);
+  g_return_if_fail (out_n_slices != NULL);
+
+  /* XXX: Too much? */
+  max_texture_size = self->command_queue->max_texture_size / 4;
+
+  tex_width = texture->width;
+  tex_height = texture->height;
+  cols = (texture->width / max_texture_size) + 1;
+  rows = (texture->height / max_texture_size) + 1;
+
+  if ((t = gdk_texture_get_render_data (texture, self)))
+    {
+      *out_slices = t->slices;
+      *out_n_slices = t->n_slices;
+      return;
+    }
+
+  n_slices = cols * rows;
+  slices = g_new0 (GskGLTextureSlice, n_slices);
+
+  for (guint col = 0; col < cols; col ++)
+    {
+      int slice_width = MIN (max_texture_size, texture->width - x);
+
+      for (guint row = 0; row < rows; row ++)
+        {
+          int slice_height = MIN (max_texture_size, texture->height - y);
+          int slice_index = (col * rows) + row;
+          guint texture_id;
+
+          texture_id = gsk_gl_command_queue_upload_texture (self->command_queue,
+                                                            texture,
+                                                            x, y,
+                                                            slice_width, slice_height,
+                                                            GL_NEAREST, GL_NEAREST);
+
+          slices[slice_index].rect.x = x;
+          slices[slice_index].rect.y = y;
+          slices[slice_index].rect.width = slice_width;
+          slices[slice_index].rect.height = slice_height;
+          slices[slice_index].texture_id = texture_id;
+
+          y += slice_height;
+        }
+
+      y = 0;
+      x += slice_width;
+    }
+
+  /* Allocate one Texture for the entire thing. */
+  t = gsk_gl_texture_new (0,
+                          tex_width, tex_height,
+                          GL_NEAREST, GL_NEAREST,
+                          self->current_frame_id);
+
+  /* Use gsk_gl_texture_free() as destroy notify here since we are
+   * not inserting this GskGLTexture into self->textures!
+   */
+  gdk_texture_set_render_data (texture, self, t,
+                               (GDestroyNotify)gsk_gl_texture_free);
+
+  t->slices = *out_slices = slices;
+  t->n_slices = *out_n_slices = n_slices;
+}

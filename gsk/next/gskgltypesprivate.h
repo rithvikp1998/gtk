@@ -42,6 +42,7 @@ typedef struct _GskGLProgram GskGLProgram;
 typedef struct _GskGLRenderJob GskGLRenderJob;
 typedef struct _GskGLShadowLibrary GskGLShadowLibrary;
 typedef struct _GskGLTexture GskGLTexture;
+typedef struct _GskGLTextureSlice GskGLTextureSlice;
 typedef struct _GskGLTextureAtlas GskGLTextureAtlas;
 typedef struct _GskGLTextureLibrary GskGLTextureLibrary;
 typedef struct _GskGLUniformState GskGLUniformState;

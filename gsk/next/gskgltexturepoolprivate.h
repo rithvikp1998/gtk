@@ -25,32 +25,44 @@
 
 G_BEGIN_DECLS
 
-typedef struct _GskGLTexture GskGLTexture;
-typedef struct _GskGLTexturePool GskGLTexturePool;
-
-struct _GskGLTexturePool
+typedef struct _GskGLTexturePool
 {
   GQueue by_width;
   GQueue by_height;
+} GskGLTexturePool;
+
+struct _GskGLTextureSlice
+{
+  cairo_rectangle_int_t rect;
+  guint texture_id;
 };
 
 struct _GskGLTexture
 {
-  GList       width_link;  /* Used to sort textures by width */
-  GList       height_link; /* Used to sort textures by height */
+  /* Used to sort by width/height in pool */
+  GList              width_link;
+  GList              height_link;
 
-  gint64      last_used_in_frame;
+  /* Identifier of the frame that created it */
+  gint64             last_used_in_frame;
 
-  GdkTexture *user;
+  /* Backpointer to texture (can be cleared asynchronously) */
+  GdkTexture        *user;
 
-  guint       texture_id;
+  /* Only used by sliced textures */
+  GskGLTextureSlice *slices;
+  guint              n_slices;
 
-  float       width;
-  float       height;
-  int         min_filter;
-  int         mag_filter;
+  /* The actual GL texture identifier in some shared context */
+  guint              texture_id;
 
-  guint       permanent : 1;
+  float              width;
+  float              height;
+  int                min_filter;
+  int                mag_filter;
+
+  /* Set when used by an atlas so we don't drop the texture */
+  guint              permanent : 1;
 };
 
 void          gsk_gl_texture_pool_init  (GskGLTexturePool *self);

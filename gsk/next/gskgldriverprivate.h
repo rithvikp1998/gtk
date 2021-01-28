@@ -156,6 +156,10 @@ GskGLTexture      *gsk_next_driver_acquire_texture       (GskNextDriver        *
                                                           int                   mag_filter);
 void               gsk_next_driver_release_texture       (GskNextDriver        *self,
                                                           GskGLTexture         *texture);
+void               gsk_next_driver_slice_texture         (GskNextDriver        *self,
+                                                          GdkTexture           *texture,
+                                                          GskGLTextureSlice   **out_slices,
+                                                          guint                *out_n_slices);
 GskGLProgram      *gsk_next_driver_lookup_shader         (GskNextDriver        *self,
                                                           GskGLShader          *shader,
                                                           GError              **error);

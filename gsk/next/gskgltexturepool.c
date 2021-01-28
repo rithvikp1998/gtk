@@ -40,6 +40,14 @@ gsk_gl_texture_free (GskGLTexture *texture)
           texture->texture_id = 0;
         }
 
+      for (guint i = 0; i < texture->n_slices; i++)
+        {
+          glDeleteTextures (1, &texture->slices[i].texture_id);
+          texture->slices[i].texture_id = 0;
+        }
+
+      g_clear_pointer (&texture->slices, g_free);
+
       g_slice_free (GskGLTexture, texture);
     }
 }
