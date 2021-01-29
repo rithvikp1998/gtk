@@ -1142,9 +1142,6 @@ blur_node (GskGLRenderJob       *job,
       /* Ensure that we actually got a real texture_id */
       g_assert (offscreen->texture_id != 0);
 
-      /* If this wasn't FALSE, we'd have to release the texture */
-      g_assert (offscreen->do_not_cache == FALSE);
-
       offscreen->texture_id = blur_offscreen (job,
                                               offscreen,
                                               texture_width * scale_x,
