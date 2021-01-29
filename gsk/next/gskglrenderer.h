@@ -1,4 +1,4 @@
-/* gskglrendererprivate.h
+/* gskglrenderer.h
  *
  * Copyright 2020 Christian Hergert <chergert@redhat.com>
  *
@@ -18,8 +18,8 @@
  * SPDX-License-Identifier: LGPL-2.1-or-later
  */
 
-#ifndef __GSK_NEXT_RENDERER_PRIVATE_H__
-#define __GSK_NEXT_RENDERER_PRIVATE_H__
+#ifndef __GSK_NEXT_RENDERER_H__
+#define __GSK_NEXT_RENDERER_H__
 
 #include <gsk/gskrenderer.h>
 
@@ -44,4 +44,4 @@ GskRenderer *           gsk_next_renderer_new                     (void);
 
 G_END_DECLS
 
-#endif /* __GSK_NEXT_RENDERER_PRIVATE_H__ */
+#endif /* __GSK_NEXT_RENDERER__ */

@@ -28,7 +28,7 @@
 #include "gskgldriverprivate.h"
 #include "gskglprogramprivate.h"
 #include "gskglrenderjobprivate.h"
-#include "gskglrenderer.h"
+#include "gskglrendererprivate.h"
 
 struct _GskNextRendererClass
 {
@@ -327,4 +327,19 @@ gsk_next_renderer_class_init (GskNextRendererClass *klass)
 static void
 gsk_next_renderer_init (GskNextRenderer *self)
 {
+}
+
+gboolean
+gsk_next_renderer_try_compile_gl_shader (GskNextRenderer  *renderer,
+                                         GskGLShader      *shader,
+                                         GError          **error)
+{
+  GskGLProgram *program;
+
+  g_return_val_if_fail (GSK_IS_NEXT_RENDERER (renderer), FALSE);
+  g_return_val_if_fail (shader != NULL, FALSE);
+
+  program = gsk_next_driver_lookup_shader (renderer->driver, shader, error);
+
+  return program != NULL;
 }

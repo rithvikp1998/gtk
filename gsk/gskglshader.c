@@ -139,7 +139,9 @@
 #include "gskglshader.h"
 #include "gskglshaderprivate.h"
 #include "gskdebugprivate.h"
+
 #include "gl/gskglrendererprivate.h"
+#include "next/gskglrendererprivate.h"
 
 static GskGLUniformType
 uniform_type_from_glsl (const char *str)
@@ -542,8 +544,9 @@ gsk_gl_shader_compile (GskGLShader  *shader,
   g_return_val_if_fail (GSK_IS_GL_SHADER (shader), FALSE);
 
   if (GSK_IS_GL_RENDERER (renderer))
-    return gsk_gl_renderer_try_compile_gl_shader (GSK_GL_RENDERER (renderer),
-                                                  shader, error);
+    return gsk_gl_renderer_try_compile_gl_shader (GSK_GL_RENDERER (renderer), shader, error);
+  else if (GSK_IS_NEXT_RENDERER (renderer))
+    return gsk_next_renderer_try_compile_gl_shader (GSK_NEXT_RENDERER (renderer), shader, error);
 
   g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
                "The renderer does not support gl shaders");

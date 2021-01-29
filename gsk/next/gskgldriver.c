@@ -1134,7 +1134,7 @@ gsk_next_driver_lookup_shader (GskNextDriver  *self,
       g_object_unref (compiler);
     }
 
-  return g_steal_pointer (&program);
+  return program;
 }
 
 void

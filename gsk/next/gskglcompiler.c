@@ -618,7 +618,7 @@ gsk_gl_compiler_compile (GskGLCompiler  *self,
     {
       glDeleteShader (vertex_id);
       glDeleteShader (fragment_id);
-      return 0;
+      return NULL;
     }
 
   print_shader_info ("Fragment shader", fragment_id, name);
