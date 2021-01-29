@@ -169,10 +169,11 @@ static inline void
 gsk_gl_command_queue_capture_png (GskGLCommandQueue *self,
                                   const char        *filename,
                                   guint              width,
-                                  guint              height)
+                                  guint              height,
+                                  gboolean           flip_y)
 {
   cairo_surface_t *surface;
-  gpointer data;
+  guint8 *data;
   guint stride;
 
   g_assert (GSK_IS_GL_COMMAND_QUEUE (self));
@@ -182,6 +183,20 @@ gsk_gl_command_queue_capture_png (GskGLCommandQueue *self,
   data = g_malloc_n (height, stride);
 
   glReadPixels (0, 0, width, height, GL_BGRA, GL_UNSIGNED_BYTE, data);
+
+  if (flip_y)
+    {
+      guint8 *flipped = g_malloc_n (height, stride);
+
+      for (guint i = 0; i < height; i++)
+        memcpy (flipped + (height * stride) - ((i + 1) * stride),
+                data + (stride * i),
+                stride);
+
+      g_free (data);
+      data = flipped;
+    }
+
   surface = cairo_image_surface_create_for_data (data, CAIRO_FORMAT_ARGB32, width, height, stride);
   cairo_surface_write_to_png (surface, filename);
 
@@ -870,7 +885,7 @@ gsk_gl_command_queue_execute (GskGLCommandQueue    *self,
                       batch->any.kind, batch->any.program,
                       batch->any.kind == GSK_GL_COMMAND_KIND_DRAW ? batch->draw.uniform_count : 0,
                       batch->any.kind == GSK_GL_COMMAND_KIND_DRAW ? batch->draw.bind_count : 0);
-          gsk_gl_command_queue_capture_png (self, filename, width, height);
+          gsk_gl_command_queue_capture_png (self, filename, width, height, TRUE);
         }
 #endif
 
