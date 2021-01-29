@@ -863,10 +863,13 @@ gsk_gl_command_queue_execute (GskGLCommandQueue    *self,
       if (batch->any.kind == GSK_GL_COMMAND_KIND_DRAW ||
           batch->any.kind == GSK_GL_COMMAND_KIND_CLEAR)
         {
-          char filename[32];
+          char filename[64];
           g_snprintf (filename, sizeof filename,
-                      "capture%u_batch%d_kind%u.png",
-                      count++, next_batch_index, batch->any.kind);
+                      "capture%03u_batch%03d_kind%u_program%u_u%u_b%u.png",
+                      count, next_batch_index,
+                      batch->any.kind, batch->any.program,
+                      batch->any.kind == GSK_GL_COMMAND_KIND_DRAW ? batch->draw.uniform_count : 0,
+                      batch->any.kind == GSK_GL_COMMAND_KIND_DRAW ? batch->draw.bind_count : 0);
           gsk_gl_command_queue_capture_png (self, filename, width, height);
         }
 #endif
