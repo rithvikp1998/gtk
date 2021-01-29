@@ -2540,44 +2540,48 @@ gsk_gl_render_job_visit_opacity_node (GskGLRenderJob *job,
 {
   GskRenderNode *child = gsk_opacity_node_get_child (node);
   float opacity = gsk_opacity_node_get_opacity (node);
+  float prev_alpha = job->alpha;
+  float new_alpha = job->alpha * opacity;
 
-  if (gsk_render_node_get_node_type (child) == GSK_CONTAINER_NODE)
+  if (new_alpha >= ((float)0x00ff / (float)0xffff))
     {
-      GskGLRenderOffscreen offscreen = {0};
+      if (gsk_render_node_get_node_type (child) == GSK_CONTAINER_NODE)
+        {
+          GskGLRenderOffscreen offscreen = {0};
 
-      /* The semantics of an opacity node mandate that when, e.g., two
-       * color nodes overlap, there may not be any blending between them.
-       */
+          offscreen.bounds = &child->bounds;
+          offscreen.force_offscreen = TRUE;
+          offscreen.reset_clip = TRUE;
 
-      offscreen.bounds = &child->bounds;
-      offscreen.force_offscreen = TRUE;
-      offscreen.reset_clip = TRUE;
+          /* The semantics of an opacity node mandate that when, e.g., two
+           * color nodes overlap, there may not be any blending between them.
+           */
+          if (!gsk_gl_render_job_visit_node_with_offscreen (job, child, &offscreen))
+            return;
 
-      gsk_gl_render_job_visit_node_with_offscreen (job, child, &offscreen);
+          g_assert (offscreen.texture_id);
+          g_assert (job->alpha == prev_alpha);
 
-      g_assert (offscreen.texture_id);
-
-      gsk_gl_program_begin_draw (job->driver->blit,
-                                 &job->viewport,
-                                 &job->projection,
-                                 gsk_gl_render_job_get_modelview_matrix (job),
-                                 gsk_gl_render_job_get_clip (job),
-                                 job->alpha * opacity);
-      gsk_gl_program_set_uniform_texture (job->driver->blit,
-                                          UNIFORM_SHARED_SOURCE,
-                                          GL_TEXTURE_2D,
-                                          GL_TEXTURE0,
-                                          offscreen.texture_id);
-      gsk_gl_render_job_load_vertices_from_offscreen (job, &node->bounds, &offscreen);
-      gsk_gl_program_end_draw (job->driver->blit);
-    }
-  else
-    {
-      float prev_alpha = job->alpha;
-
-      job->alpha = job->alpha * opacity;
-      gsk_gl_render_job_visit_node (job, child);
-      job->alpha = prev_alpha;
+          gsk_gl_program_begin_draw (job->driver->blit,
+                                     &job->viewport,
+                                     &job->projection,
+                                     gsk_gl_render_job_get_modelview_matrix (job),
+                                     gsk_gl_render_job_get_clip (job),
+                                     new_alpha);
+          gsk_gl_program_set_uniform_texture (job->driver->blit,
+                                              UNIFORM_SHARED_SOURCE,
+                                              GL_TEXTURE_2D,
+                                              GL_TEXTURE0,
+                                              offscreen.texture_id);
+          gsk_gl_render_job_load_vertices_from_offscreen (job, &node->bounds, &offscreen);
+          gsk_gl_program_end_draw (job->driver->blit);
+        }
+      else
+        {
+          job->alpha = new_alpha;
+          gsk_gl_render_job_visit_node (job, child);
+          job->alpha = prev_alpha;
+        }
     }
 }
 
