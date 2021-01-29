@@ -1878,6 +1878,7 @@ gsk_gl_render_job_visit_blurred_inset_shadow_node (GskGLRenderJob *job,
   if (blurred_texture_id == 0)
     {
       float spread = gsk_inset_shadow_node_get_spread (node) + half_blur_extra;
+      GskRoundedRect transformed_outline;
       GskRoundedRect outline_to_blur;
       GskGLRenderTarget *render_target;
       GskGLRenderState state;
@@ -1930,6 +1931,8 @@ gsk_gl_render_job_visit_blurred_inset_shadow_node (GskGLRenderJob *job,
       gsk_gl_command_queue_bind_framebuffer (job->command_queue, render_target->framebuffer_id);
       gsk_gl_command_queue_clear (job->command_queue, 0, &job->viewport);
 
+      gsk_gl_render_job_transform_rounded_rect (job, &outline_to_blur, &transformed_outline);
+
       /* Actual inset shadow outline drawing */
       gsk_gl_program_begin_draw (job->driver->inset_shadow,
                                  &job->viewport,
@@ -1939,7 +1942,7 @@ gsk_gl_render_job_visit_blurred_inset_shadow_node (GskGLRenderJob *job,
                                  job->alpha);
       gsk_gl_program_set_uniform_rounded_rect (job->driver->inset_shadow,
                                                UNIFORM_INSET_SHADOW_OUTLINE_RECT,
-                                               &outline_to_blur);
+                                               &transformed_outline);
       gsk_gl_program_set_uniform_color (job->driver->inset_shadow,
                                         UNIFORM_INSET_SHADOW_COLOR,
                                         gsk_inset_shadow_node_get_color (node));
