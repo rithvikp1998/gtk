@@ -108,8 +108,8 @@ gsk_gl_icon_library_add (GskGLIconLibrary     *self,
 
   if G_LIKELY (atlas != NULL)
     {
-      packed_x = atlas->width * icon_data->entry.area.origin.x;
-      packed_y = atlas->width * icon_data->entry.area.origin.y;
+      packed_x = atlas->width * icon_data->entry.area.x;
+      packed_y = atlas->width * icon_data->entry.area.y;
     }
   else
     {

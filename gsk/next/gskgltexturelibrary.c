@@ -256,10 +256,10 @@ gsk_gl_texture_library_pack (GskGLTextureLibrary *self,
     {
       entry->is_atlased = FALSE;
       entry->texture = NULL;
-      entry->area.origin.x = 0.0f;
-      entry->area.origin.y = 0.0f;
-      entry->area.size.width = 0.0f;
-      entry->area.size.height = 0.0f;
+      entry->area.x = 0.0f;
+      entry->area.y = 0.0f;
+      entry->area.x2 = 0.0f;
+      entry->area.y2 = 0.0f;
     }
   else if (width <= self->max_entry_size && height <= self->max_entry_size)
     {
@@ -275,10 +275,10 @@ gsk_gl_texture_library_pack (GskGLTextureLibrary *self,
 
       entry->atlas = atlas;
       entry->is_atlased = TRUE;
-      entry->area.origin.x = (float)(packed_x + 1) / atlas->width;
-      entry->area.origin.y = (float)(packed_y + 1) / atlas->height;
-      entry->area.size.width = (float)width / atlas->width;
-      entry->area.size.height = (float)height / atlas->height;
+      entry->area.x = (float)(packed_x + 1) / atlas->width;
+      entry->area.y = (float)(packed_y + 1) / atlas->height;
+      entry->area.x2 = entry->area.x + (float)width / atlas->width;
+      entry->area.y2 = entry->area.y + (float)height / atlas->height;
     }
   else
     {
@@ -286,10 +286,10 @@ gsk_gl_texture_library_pack (GskGLTextureLibrary *self,
 
       entry->texture = texture;
       entry->is_atlased = FALSE;
-      entry->area.origin.x = 0.0f;
-      entry->area.origin.y = 0.0f;
-      entry->area.size.width = 1.0f;
-      entry->area.size.height = 1.0f;
+      entry->area.x = 0.0f;
+      entry->area.y = 0.0f;
+      entry->area.x2 = 1.0f;
+      entry->area.y2 = 1.0f;
     }
 
   g_hash_table_insert (self->hash_table, key, entry);

@@ -2663,10 +2663,10 @@ gsk_gl_render_job_visit_text_node (GskGLRenderJob *job,
           last_texture = texture_id;
         }
 
-      tx = glyph->entry.area.origin.x;
-      ty = glyph->entry.area.origin.y;
-      tx2 = tx + glyph->entry.area.size.width;
-      ty2 = ty + glyph->entry.area.size.height;
+      tx = glyph->entry.area.x;
+      ty = glyph->entry.area.y;
+      tx2 = glyph->entry.area.x2;
+      ty2 = glyph->entry.area.y2;
 
       glyph_x = floor (x + cx + 0.125) + glyph->ink_rect.x;
       glyph_y = floor (y + cy + 0.125) + glyph->ink_rect.y;
@@ -3119,10 +3119,7 @@ gsk_gl_render_job_upload_texture (GskGLRenderJob       *job,
 
       gsk_gl_icon_library_lookup_or_add (job->driver->icons, texture, &icon_data);
       offscreen->texture_id = GSK_GL_TEXTURE_ATLAS_ENTRY_TEXTURE (icon_data);
-      offscreen->area.x = icon_data->entry.area.origin.x;
-      offscreen->area.y = icon_data->entry.area.origin.y;
-      offscreen->area.x2 = icon_data->entry.area.origin.x + icon_data->entry.area.size.width;
-      offscreen->area.y2 = icon_data->entry.area.origin.y + icon_data->entry.area.size.height;
+      memcpy (&offscreen->area, &icon_data->entry.area, sizeof offscreen->area);
     }
   else
     {

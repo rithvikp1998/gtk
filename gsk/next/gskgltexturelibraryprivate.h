@@ -64,7 +64,12 @@ typedef struct _GskGLTextureAtlasEntry
   };
 
   /* The area within the atlas translated to 0..1 bounds */
-  graphene_rect_t area;
+  struct {
+    float x;
+    float y;
+    float x2;
+    float y2;
+  } area;
 
   /* Number of pixels in the entry, used to calculate usage
    * of an atlas while processing.

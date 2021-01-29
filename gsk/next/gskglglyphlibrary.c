@@ -249,8 +249,8 @@ gsk_gl_glyph_library_upload_glyph (GskGLGlyphLibrary     *self,
 
   if G_LIKELY (atlas != NULL)
     {
-      x = atlas->width * value->entry.area.origin.x;
-      y = atlas->width * value->entry.area.origin.y;
+      x = atlas->width * value->entry.area.x;
+      y = atlas->width * value->entry.area.y;
     }
   else
     {
