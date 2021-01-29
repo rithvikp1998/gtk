@@ -73,6 +73,8 @@ static guint8 uniform_sizes[] = {
     g_assert (uniform_sizes[format] > 0);                                                         \
     u = alloc_uniform_data(state->uniform_data, uniform_sizes[format] * MAX (1, count), &offset); \
     (info)->offset = offset;                                                                      \
+    /* We might have increased array length */                                                    \
+    (info)->array_count = count;                                                                  \
   } G_STMT_END
 
 typedef struct
@@ -174,6 +176,8 @@ alloc_uniform_data (GByteArray *buffer,
   guint old_len = buffer->len;
 
   g_assert (size > 0);
+  g_assert (align == 4 || align == 8 || align == 16);
+  g_assert (masked < align);
 
   /* Try to give a more natural alignment based on the size
    * of the uniform. In case it's greater than 4 try to at least
@@ -229,10 +233,23 @@ get_uniform (GskGLUniformState  *state,
       if (info->format == 0)
         goto setup_info;
 
-      if G_LIKELY (format == info->format && array_count <= info->array_count)
+      if G_LIKELY (format == info->format)
         {
-          *infoptr = info;
-          return state->uniform_data->data + info->offset;
+          if G_LIKELY (array_count <= info->array_count)
+            {
+              *infoptr = info;
+              return state->uniform_data->data + info->offset;
+            }
+
+          /* We found the uniform, but there is not enough space for the
+           * amount that was requested. Instead, allocate new space and
+           * set the value to "initial" so that the caller just writes
+           * over the previous value.
+           *
+           * This can happen when using dynamic array lengths like the
+           * "n_color_stops" in gradient shaders.
+           */
+          goto setup_info;
         }
       else
         {
