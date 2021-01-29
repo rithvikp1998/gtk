@@ -2024,6 +2024,7 @@ gsk_gl_render_job_visit_unblurred_outset_shadow_node (GskGLRenderJob *job,
                                                       GskRenderNode  *node)
 {
   const GskRoundedRect *outline = gsk_outset_shadow_node_get_outline (node);
+  GskRoundedRect transformed_outline;
   float x = node->bounds.origin.x;
   float y = node->bounds.origin.y;
   float w = node->bounds.size.width;
@@ -2041,6 +2042,8 @@ gsk_gl_render_job_visit_unblurred_outset_shadow_node (GskGLRenderJob *job,
     { outline->corner[3].width + spread - dx, outline->corner[3].height + spread + dy },
   };
 
+  gsk_gl_render_job_transform_rounded_rect (job, outline, &transformed_outline);
+
   gsk_gl_program_begin_draw (job->driver->unblurred_outset_shadow,
                              &job->viewport,
                              &job->projection,
@@ -2049,7 +2052,7 @@ gsk_gl_render_job_visit_unblurred_outset_shadow_node (GskGLRenderJob *job,
                              job->alpha);
   gsk_gl_program_set_uniform_rounded_rect (job->driver->unblurred_outset_shadow,
                                            UNIFORM_UNBLURRED_OUTSET_SHADOW_OUTLINE_RECT,
-                                           outline);
+                                           &transformed_outline);
   gsk_gl_program_set_uniform_color (job->driver->unblurred_outset_shadow,
                                     UNIFORM_UNBLURRED_OUTSET_SHADOW_COLOR,
                                     gsk_outset_shadow_node_get_color (node));
