@@ -3642,8 +3642,8 @@ gsk_gl_render_job_render_flipped (GskGLRenderJob *job,
   graphene_matrix_scale (&proj, 1, -1, 1);
 
   if (!gsk_gl_command_queue_create_render_target (job->command_queue,
-                                                  job->viewport.size.width,
-                                                  job->viewport.size.height,
+                                                  MAX (1, job->viewport.size.width),
+                                                  MAX (1, job->viewport.size.height),
                                                   GL_NEAREST, GL_NEAREST,
                                                   &framebuffer_id, &texture_id))
     return;
