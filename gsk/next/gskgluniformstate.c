@@ -298,8 +298,7 @@ setup_info:
   info->format = format;
   info->offset = offset;
   info->array_count = array_count;
-
-  g_assert (info->initial == TRUE);
+  info->initial = TRUE;
 
   *infoptr = info;
 
