@@ -1088,6 +1088,9 @@ gsk_next_driver_lookup_shader (GskNextDriver  *self,
       gsk_gl_compiler_set_preamble_from_resource (compiler,
                                                   GSK_GL_COMPILER_FRAGMENT,
                                                   "/org/gtk/libgsk/glsl/preamble.fs.glsl");
+      gsk_gl_compiler_set_source_from_resource (compiler,
+                                                GSK_GL_COMPILER_ALL,
+                                                "/org/gtk/libgsk/glsl/custom.glsl");
       gsk_gl_compiler_set_suffix (compiler, GSK_GL_COMPILER_FRAGMENT, suffix);
 
       /* Setup attributes that are provided via VBO */
