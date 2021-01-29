@@ -2143,7 +2143,7 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
       /* Increase by the spread */
       gsk_rounded_rect_shrink (&scaled_outline, -spread, -spread, -spread, -spread);
       /* Grow bounds but don't grow corners */
-      graphene_rect_inset (&scaled_outline.bounds, -half_blur_extra, -half_blur_extra);
+      graphene_rect_inset (&scaled_outline.bounds, - blur_extra / 2.0, - blur_extra / 2.0);
       /* For the center part, we add a few pixels */
       scaled_outline.bounds.size.width += SHADOW_EXTRA_SIZE;
       scaled_outline.bounds.size.height += SHADOW_EXTRA_SIZE;
@@ -2151,8 +2151,8 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
       do_slicing = TRUE;
     }
 
-  texture_width = ceil ((scaled_outline.bounds.size.width + blur_extra) * scale_x);
-  texture_height = ceil ((scaled_outline.bounds.size.height + blur_extra) * scale_y);
+  texture_width = (int)ceil ((scaled_outline.bounds.size.width + blur_extra) * scale_x);
+  texture_height = (int)ceil ((scaled_outline.bounds.size.height + blur_extra) * scale_y);
 
   scaled_outline.bounds.origin.x = extra_blur_pixels;
   scaled_outline.bounds.origin.y = extra_blur_pixels;

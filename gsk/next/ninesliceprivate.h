@@ -79,7 +79,7 @@ nine_slice_rounded_rect (GskGLTextureNineSlice *slices,
 
   /* Left center */
   slices[3].rect.x = origin->x;
-  slices[3].rect.y = origin->y + size->height / 2.0;
+  slices[3].rect.y = origin->y + size->height / 2;
   slices[3].rect.width = left_width;
   slices[3].rect.height = 1;
 
@@ -124,8 +124,8 @@ nine_slice_to_texture_coords (GskGLTextureNineSlice *slices,
                               int                    texture_width,
                               int                    texture_height)
 {
-  float fw = (float)texture_width;
-  float fh = (float)texture_height;
+  float fw = texture_width;
+  float fh = texture_height;
 
   for (guint i = 0; i < 9; i++)
     {
@@ -133,16 +133,16 @@ nine_slice_to_texture_coords (GskGLTextureNineSlice *slices,
 
       slice->area.origin.x = slice->rect.x / fw;
       slice->area.origin.y = 1.0 - ((slice->rect.y + slice->rect.height) / fh);
-      slice->area.size.width = slice->rect.width / fw;
-      slice->area.size.height = slice->rect.height / fh;
+      slice->area.size.width = ((slice->rect.x + slice->rect.width) / fw) - slice->area.origin.x;
+      slice->area.size.height = (1.0 - (slice->rect.y / fh)) - slice->area.origin.y;
 
 #ifdef G_ENABLE_DEBUG
       g_assert_cmpfloat (slice->area.origin.x, >=, 0);
       g_assert_cmpfloat (slice->area.origin.x, <=, 1);
       g_assert_cmpfloat (slice->area.origin.y, >=, 0);
       g_assert_cmpfloat (slice->area.origin.y, <=, 1);
-      g_assert_cmpfloat (slice->area.origin.x + slice->area.size.width, <=, 1);
-      g_assert_cmpfloat (slice->area.origin.y + slice->area.size.height, <=, 1);
+      g_assert_cmpfloat (slice->area.size.width, >, 0);
+      g_assert_cmpfloat (slice->area.size.height, >, 0);
 #endif
     }
 }
