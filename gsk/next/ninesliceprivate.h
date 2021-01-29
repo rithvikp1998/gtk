@@ -39,9 +39,9 @@ enum {
 };
 
 static inline bool G_GNUC_PURE
-slice_is_visible (const cairo_rectangle_int_t *r)
+nine_slice_is_visible (const GskGLTextureNineSlice *slice)
 {
-  return (r->width > 0 && r->height > 0);
+  return slice->rect.width > 0 && slice->rect.height > 0;
 }
 
 static inline void
