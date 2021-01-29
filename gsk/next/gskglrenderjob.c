@@ -3288,24 +3288,18 @@ gsk_gl_render_job_visit_repeat_node (GskGLRenderJob *job,
                                       GL_TEXTURE_2D,
                                       GL_TEXTURE0,
                                       offscreen.texture_id);
-  gsk_gl_program_set_uniform4fv (job->driver->repeat,
-                                 UNIFORM_REPEAT_CHILD_BOUNDS,
-                                 1,
-                                 (const float []) {
-                                   node->bounds.origin.x - child_bounds->origin.x,
-                                   node->bounds.origin.y - child_bounds->origin.y,
-                                   node->bounds.size.width / child_bounds->size.width,
-                                   node->bounds.size.height / child_bounds->size.height,
-                                 });
-  gsk_gl_program_set_uniform4fv (job->driver->repeat,
-                                 UNIFORM_REPEAT_TEXTURE_RECT,
-                                 1,
-                                 (const float []) {
-                                   offscreen.area.x,
-                                   offscreen.was_offscreen ? offscreen.area.y2 : offscreen.area.y,
-                                   offscreen.area.x2,
-                                   offscreen.was_offscreen ? offscreen.area.y : offscreen.area.y2,
-                                 });
+  gsk_gl_program_set_uniform4f (job->driver->repeat,
+                                UNIFORM_REPEAT_CHILD_BOUNDS,
+                                (node->bounds.origin.x - child_bounds->origin.x) / child_bounds->size.width,
+                                (node->bounds.origin.y - child_bounds->origin.y) / child_bounds->size.height,
+                                node->bounds.size.width / child_bounds->size.width,
+                                node->bounds.size.height / child_bounds->size.height);
+  gsk_gl_program_set_uniform4f (job->driver->repeat,
+                                UNIFORM_REPEAT_TEXTURE_RECT,
+                                offscreen.area.x,
+                                offscreen.was_offscreen ? offscreen.area.y2 : offscreen.area.y,
+                                offscreen.area.x2,
+                                offscreen.was_offscreen ? offscreen.area.y : offscreen.area.y2);
   gsk_gl_render_job_load_vertices_from_offscreen (job, &node->bounds, &offscreen);
   gsk_gl_program_end_draw (job->driver->repeat);
 }
