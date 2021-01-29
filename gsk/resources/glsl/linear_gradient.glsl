@@ -4,10 +4,13 @@ uniform vec4 u_points;
 _NOPERSPECTIVE_ _OUT_ vec4 info;
 
 void main() {
-  gl_Position = gsk_project(aPosition);
+  gl_Position = u_projection * (u_modelview * vec4(aPosition, 0.0, 1.0));
 
+  vec2 mv0 = u_modelview[0].xy;
+  vec2 mv1 = u_modelview[1].xy;
   vec2 offset = aPosition - u_points.xy;
-  vec2 coord = u_scale * offset;
+  vec2 coord = vec2(dot(mv0, offset),
+                    dot(mv1, offset));
 
   // Original equation:
   // VS | maxDist = length(end - start);
@@ -28,7 +31,8 @@ void main() {
   // 4. We can avoid the FS division by passing a scaled pos from the VS:
   // offset = dot(gnorm, pos) / gradientLength = dot(gnorm, pos / gradientLength)
   // 5. 1.0 / length(gradient) is inversesqrt(dot(gradient, gradient)) in GLSL
-  vec2 gradient = u_scale * u_points.zw;
+  vec2 gradient = vec2(dot(mv0, u_points.zw),
+                       dot(mv1, u_points.zw));
   float rcp_gradient_length = inversesqrt(dot(gradient, gradient));
 
   info = rcp_gradient_length * vec4(coord, gradient);
