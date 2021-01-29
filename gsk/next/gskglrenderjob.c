@@ -41,6 +41,8 @@
 #include "gskglrenderjobprivate.h"
 #include "gskglshadowlibraryprivate.h"
 
+#include "ninesliceprivate.h"
+
 #define ORTHO_NEAR_PLANE   -10000
 #define ORTHO_FAR_PLANE     10000
 #define MAX_GRADIENT_STOPS  6
@@ -2281,15 +2283,23 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
       return;
     }
 
-#if 0
-
-  ops_set_program (builder, &self->programs->outset_shadow_program);
-  ops_set_color (builder, color);
-  ops_set_texture (builder, blurred_texture_id);
-
-  shadow = ops_begin (builder, OP_CHANGE_OUTSET_SHADOW);
-  shadow->outline.value = transform_rect (self, builder, outline);
-  shadow->outline.send = TRUE;
+  gsk_gl_program_begin_draw (job->driver->outset_shadow,
+                             &job->viewport,
+                             &job->projection,
+                             gsk_gl_render_job_get_modelview_matrix (job),
+                             gsk_gl_render_job_get_clip (job),
+                             job->alpha);
+  gsk_gl_program_set_uniform_color (job->driver->outset_shadow,
+                                    UNIFORM_OUTSET_SHADOW_COLOR,
+                                    color);
+  gsk_gl_program_set_uniform_texture (job->driver->outset_shadow,
+                                      UNIFORM_SHARED_SOURCE,
+                                      GL_TEXTURE_2D,
+                                      GL_TEXTURE0,
+                                      blurred_texture_id);
+  gsk_gl_program_set_uniform_rounded_rect (job->driver->outset_shadow,
+                                           UNIFORM_OUTSET_SHADOW_OUTLINE_RECT,
+                                           &transformed_outline);
 
   {
     const float min_x = floorf (outline->bounds.origin.x - spread - (blur_extra / 2.0) + dx);
@@ -2298,154 +2308,137 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
                                (blur_extra / 2.0) + dx + spread);
     const float max_y = ceilf (outline->bounds.origin.y + outline->bounds.size.height +
                                (blur_extra / 2.0) + dy + spread);
-    cairo_rectangle_int_t slices[9];
-    TextureRegion tregs[9];
+    const GskGLTextureNineSlice *slices;
+    GskGLTexture *texture;
 
-    /* TODO: The slicing never changes and could just go into the cache */
-    nine_slice_rounded_rect (&scaled_outline, slices);
-    nine_slice_grow (slices, extra_blur_pixels);
-    nine_slice_to_texture_coords (slices, texture_width, texture_height, tregs);
+    texture = gsk_next_driver_get_texture_by_id (job->driver, blurred_texture_id);
+    slices = gsk_gl_texture_get_nine_slice (texture, &scaled_outline, extra_blur_pixels);
+
+    offscreen.was_offscreen = TRUE;
 
     /* Our texture coordinates MUST be scaled, while the actual vertex coords
      * MUST NOT be scaled. */
 
     /* Top left */
-    if (slice_is_visible (&slices[NINE_SLICE_TOP_LEFT]))
+    if (nine_slice_is_visible (&slices[NINE_SLICE_TOP_LEFT]))
       {
-        load_vertex_data_with_region (ops_draw (builder, NULL),
-                                      &GRAPHENE_RECT_INIT (
-                                        min_x, min_y,
-                                        slices[NINE_SLICE_TOP_LEFT].width / scale_x,
-                                        slices[NINE_SLICE_TOP_LEFT].height / scale_y
-                                      ),
-                                      builder,
-                                      &tregs[NINE_SLICE_TOP_LEFT], TRUE);
+        memcpy (&offscreen.area, &slices[NINE_SLICE_TOP_LEFT].area, sizeof offscreen.area);
+        gsk_gl_render_job_load_vertices_from_offscreen (job,
+                                                        &GRAPHENE_RECT_INIT (min_x, min_y,
+                                                                             slices[NINE_SLICE_TOP_LEFT].rect.width / scale_x,
+                                                                             slices[NINE_SLICE_TOP_LEFT].rect.height / scale_y),
+                                                        &offscreen);
       }
 
     /* Top center */
-    if (slice_is_visible (&slices[NINE_SLICE_TOP_CENTER]))
+    if (nine_slice_is_visible (&slices[NINE_SLICE_TOP_CENTER]))
       {
-        const float width = (max_x - min_x) - (slices[NINE_SLICE_TOP_LEFT].width / scale_x +
-                                               slices[NINE_SLICE_TOP_RIGHT].width / scale_x);
-        load_vertex_data_with_region (ops_draw (builder, NULL),
-                                      &GRAPHENE_RECT_INIT (
-                                        min_x + (slices[NINE_SLICE_TOP_LEFT].width / scale_x),
-                                        min_y,
-                                        width,
-                                        slices[NINE_SLICE_TOP_CENTER].height / scale_y
-                                      ),
-                                      builder,
-                                      &tregs[NINE_SLICE_TOP_CENTER], TRUE);
+        memcpy (&offscreen.area, &slices[NINE_SLICE_TOP_CENTER].area, sizeof offscreen.area);
+        float width = (max_x - min_x) - (slices[NINE_SLICE_TOP_LEFT].rect.width / scale_x +
+                                         slices[NINE_SLICE_TOP_RIGHT].rect.width / scale_x);
+        gsk_gl_render_job_load_vertices_from_offscreen (job,
+                                                        &GRAPHENE_RECT_INIT (min_x + (slices[NINE_SLICE_TOP_LEFT].rect.width / scale_x),
+                                                                             min_y,
+                                                                             width,
+                                                                             slices[NINE_SLICE_TOP_CENTER].rect.height / scale_y),
+                                                        &offscreen);
       }
+
     /* Top right */
-    if (slice_is_visible (&slices[NINE_SLICE_TOP_RIGHT]))
+    if (nine_slice_is_visible (&slices[NINE_SLICE_TOP_RIGHT]))
       {
-        load_vertex_data_with_region (ops_draw (builder, NULL),
-                                      &GRAPHENE_RECT_INIT (
-                                        max_x - (slices[NINE_SLICE_TOP_RIGHT].width / scale_x),
-                                        min_y,
-                                        slices[NINE_SLICE_TOP_RIGHT].width / scale_x,
-                                        slices[NINE_SLICE_TOP_RIGHT].height / scale_y
-                                      ),
-                                      builder,
-                                      &tregs[NINE_SLICE_TOP_RIGHT], TRUE);
+        memcpy (&offscreen.area, &slices[NINE_SLICE_TOP_RIGHT].area, sizeof offscreen.area);
+        gsk_gl_render_job_load_vertices_from_offscreen (job,
+                                                        &GRAPHENE_RECT_INIT (max_x - (slices[NINE_SLICE_TOP_RIGHT].rect.width / scale_x),
+                                                                             min_y,
+                                                                             slices[NINE_SLICE_TOP_RIGHT].rect.width / scale_x,
+                                                                             slices[NINE_SLICE_TOP_RIGHT].rect.height / scale_y),
+                                                        &offscreen);
       }
 
     /* Bottom right */
-    if (slice_is_visible (&slices[NINE_SLICE_BOTTOM_RIGHT]))
+    if (nine_slice_is_visible (&slices[NINE_SLICE_BOTTOM_RIGHT]))
       {
-        load_vertex_data_with_region (ops_draw (builder, NULL),
-                                      &GRAPHENE_RECT_INIT (
-                                        max_x - (slices[NINE_SLICE_BOTTOM_RIGHT].width / scale_x),
-                                        max_y - (slices[NINE_SLICE_BOTTOM_RIGHT].height / scale_y),
-                                        slices[NINE_SLICE_BOTTOM_RIGHT].width / scale_x,
-                                        slices[NINE_SLICE_BOTTOM_RIGHT].height / scale_y
-                                      ),
-                                      builder,
-                                      &tregs[NINE_SLICE_BOTTOM_RIGHT], TRUE);
+        memcpy (&offscreen.area, &slices[NINE_SLICE_BOTTOM_RIGHT].area, sizeof offscreen.area);
+        gsk_gl_render_job_load_vertices_from_offscreen (job,
+                                                        &GRAPHENE_RECT_INIT (max_x - (slices[NINE_SLICE_BOTTOM_RIGHT].rect.width / scale_x),
+                                                                             max_y - (slices[NINE_SLICE_BOTTOM_RIGHT].rect.height / scale_y),
+                                                                             slices[NINE_SLICE_BOTTOM_RIGHT].rect.width / scale_x,
+                                                                             slices[NINE_SLICE_BOTTOM_RIGHT].rect.height / scale_y),
+                                                        &offscreen);
       }
 
     /* Bottom left */
-    if (slice_is_visible (&slices[NINE_SLICE_BOTTOM_LEFT]))
+    if (nine_slice_is_visible (&slices[NINE_SLICE_BOTTOM_LEFT]))
       {
-        load_vertex_data_with_region (ops_draw (builder, NULL),
-                                      &GRAPHENE_RECT_INIT (
-                                        min_x,
-                                        max_y - (slices[NINE_SLICE_BOTTOM_LEFT].height / scale_y),
-                                        slices[NINE_SLICE_BOTTOM_LEFT].width / scale_x,
-                                        slices[NINE_SLICE_BOTTOM_LEFT].height / scale_y
-                                      ),
-                                      builder,
-                                      &tregs[NINE_SLICE_BOTTOM_LEFT], TRUE);
+        memcpy (&offscreen.area, &slices[NINE_SLICE_BOTTOM_LEFT].area, sizeof offscreen.area);
+        gsk_gl_render_job_load_vertices_from_offscreen (job,
+                                                        &GRAPHENE_RECT_INIT (min_x,
+                                                                             max_y - (slices[NINE_SLICE_BOTTOM_LEFT].rect.height / scale_y),
+                                                                             slices[NINE_SLICE_BOTTOM_LEFT].rect.width / scale_x,
+                                                                             slices[NINE_SLICE_BOTTOM_LEFT].rect.height / scale_y),
+                                                        &offscreen);
       }
 
     /* Left side */
-    if (slice_is_visible (&slices[NINE_SLICE_LEFT_CENTER]))
+    if (nine_slice_is_visible (&slices[NINE_SLICE_LEFT_CENTER]))
       {
-        const float height = (max_y - min_y) - (slices[NINE_SLICE_TOP_LEFT].height / scale_y +
-                                                slices[NINE_SLICE_BOTTOM_LEFT].height / scale_y);
-        load_vertex_data_with_region (ops_draw (builder, NULL),
-                                      &GRAPHENE_RECT_INIT (
-                                        min_x,
-                                        min_y + (slices[NINE_SLICE_TOP_LEFT].height / scale_y),
-                                        slices[NINE_SLICE_LEFT_CENTER].width / scale_x,
-                                        height
-                                      ),
-                                      builder,
-                                      &tregs[NINE_SLICE_LEFT_CENTER], TRUE);
+        memcpy (&offscreen.area, &slices[NINE_SLICE_LEFT_CENTER].area, sizeof offscreen.area);
+        float height = (max_y - min_y) - (slices[NINE_SLICE_TOP_LEFT].rect.height / scale_y +
+                                                slices[NINE_SLICE_BOTTOM_LEFT].rect.height / scale_y);
+        gsk_gl_render_job_load_vertices_from_offscreen (job,
+                                                        &GRAPHENE_RECT_INIT (min_x,
+                                                                             min_y + (slices[NINE_SLICE_TOP_LEFT].rect.height / scale_y),
+                                                                             slices[NINE_SLICE_LEFT_CENTER].rect.width / scale_x,
+                                                                             height),
+                                                        &offscreen);
       }
 
     /* Right side */
-    if (slice_is_visible (&slices[NINE_SLICE_RIGHT_CENTER]))
+    if (nine_slice_is_visible (&slices[NINE_SLICE_RIGHT_CENTER]))
       {
-        const float height = (max_y - min_y) - (slices[NINE_SLICE_TOP_RIGHT].height / scale_y +
-                                                slices[NINE_SLICE_BOTTOM_RIGHT].height / scale_y);
-        load_vertex_data_with_region (ops_draw (builder, NULL),
-                                      &GRAPHENE_RECT_INIT (
-                                        max_x - (slices[NINE_SLICE_RIGHT_CENTER].width / scale_x),
-                                        min_y + (slices[NINE_SLICE_TOP_LEFT].height / scale_y),
-                                        slices[NINE_SLICE_RIGHT_CENTER].width / scale_x,
-                                        height
-                                      ),
-                                      builder,
-                                      &tregs[NINE_SLICE_RIGHT_CENTER], TRUE);
+        memcpy (&offscreen.area, &slices[NINE_SLICE_RIGHT_CENTER].area, sizeof offscreen.area);
+        const float height = (max_y - min_y) - (slices[NINE_SLICE_TOP_RIGHT].rect.height / scale_y +
+                                                slices[NINE_SLICE_BOTTOM_RIGHT].rect.height / scale_y);
+        gsk_gl_render_job_load_vertices_from_offscreen (job,
+                                                        &GRAPHENE_RECT_INIT (max_x - (slices[NINE_SLICE_RIGHT_CENTER].rect.width / scale_x),
+                                                                             min_y + (slices[NINE_SLICE_TOP_LEFT].rect.height / scale_y),
+                                                                             slices[NINE_SLICE_RIGHT_CENTER].rect.width / scale_x,
+                                                                             height),
+                                                        &offscreen);
       }
 
     /* Bottom side */
-    if (slice_is_visible (&slices[NINE_SLICE_BOTTOM_CENTER]))
+    if (nine_slice_is_visible (&slices[NINE_SLICE_BOTTOM_CENTER]))
       {
-        const float width = (max_x - min_x) - (slices[NINE_SLICE_BOTTOM_LEFT].width / scale_x +
-                                               slices[NINE_SLICE_BOTTOM_RIGHT].width / scale_x);
-        load_vertex_data_with_region (ops_draw (builder, NULL),
-                                      &GRAPHENE_RECT_INIT (
-                                        min_x + (slices[NINE_SLICE_BOTTOM_LEFT].width / scale_x),
-                                        max_y - (slices[NINE_SLICE_BOTTOM_CENTER].height / scale_y),
-                                        width,
-                                        slices[NINE_SLICE_BOTTOM_CENTER].height / scale_y
-                                      ),
-                                      builder,
-                                      &tregs[NINE_SLICE_BOTTOM_CENTER], TRUE);
+        memcpy (&offscreen.area, &slices[NINE_SLICE_BOTTOM_CENTER].area, sizeof offscreen.area);
+        float width = (max_x - min_x) - (slices[NINE_SLICE_BOTTOM_LEFT].rect.width / scale_x +
+                                         slices[NINE_SLICE_BOTTOM_RIGHT].rect.width / scale_x);
+        gsk_gl_render_job_load_vertices_from_offscreen (job,
+                                                        &GRAPHENE_RECT_INIT (min_x + (slices[NINE_SLICE_BOTTOM_LEFT].rect.width / scale_x),
+                                                                             max_y - (slices[NINE_SLICE_BOTTOM_CENTER].rect.height / scale_y),
+                                                                             width,
+                                                                             slices[NINE_SLICE_BOTTOM_CENTER].rect.height / scale_y),
+                                                        &offscreen);
       }
 
     /* Middle */
-    if (slice_is_visible (&slices[NINE_SLICE_CENTER]))
+    if (nine_slice_is_visible (&slices[NINE_SLICE_CENTER]))
       {
-        const float width = (max_x - min_x) - (slices[NINE_SLICE_LEFT_CENTER].width / scale_x +
-                                               slices[NINE_SLICE_RIGHT_CENTER].width / scale_x);
-        const float height = (max_y - min_y) - (slices[NINE_SLICE_TOP_CENTER].height / scale_y +
-                                                slices[NINE_SLICE_BOTTOM_CENTER].height / scale_y);
-
-        load_vertex_data_with_region (ops_draw (builder, NULL),
-                                      &GRAPHENE_RECT_INIT (
-                                        min_x + (slices[NINE_SLICE_LEFT_CENTER].width / scale_x),
-                                        min_y + (slices[NINE_SLICE_TOP_CENTER].height / scale_y),
-                                        width, height
-                                      ),
-                                      builder,
-                                      &tregs[NINE_SLICE_CENTER], TRUE);
+        memcpy (&offscreen.area, &slices[NINE_SLICE_CENTER].area, sizeof offscreen.area);
+        float width = (max_x - min_x) - (slices[NINE_SLICE_LEFT_CENTER].rect.width / scale_x +
+                                         slices[NINE_SLICE_RIGHT_CENTER].rect.width / scale_x);
+        float height = (max_y - min_y) - (slices[NINE_SLICE_TOP_CENTER].rect.height / scale_y +
+                                          slices[NINE_SLICE_BOTTOM_CENTER].rect.height / scale_y);
+        gsk_gl_render_job_load_vertices_from_offscreen (job,
+                                                        &GRAPHENE_RECT_INIT (min_x + (slices[NINE_SLICE_LEFT_CENTER].rect.width / scale_x),
+                                                                             min_y + (slices[NINE_SLICE_TOP_CENTER].rect.height / scale_y),
+                                                                             width, height),
+                                                        &offscreen);
       }
   }
-#endif
+
+  gsk_gl_program_end_draw (job->driver->outset_shadow);
 }
 
 static inline bool G_GNUC_PURE
