@@ -171,6 +171,13 @@ GskGLTextureAtlas *gsk_next_driver_create_atlas          (GskNextDriver        *
 void              gsk_next_driver_save_atlases_to_png    (GskNextDriver        *self,
                                                           const char           *directory);
 
+static inline GskGLTexture *
+gsk_next_driver_get_texture_by_id (GskNextDriver *self,
+                                   guint          texture_id)
+{
+  return g_hash_table_lookup (self->textures, GUINT_TO_POINTER (texture_id));
+}
+
 G_END_DECLS
 
 #endif /* __GSK_GL_DRIVER_PRIVATE_H__ */
