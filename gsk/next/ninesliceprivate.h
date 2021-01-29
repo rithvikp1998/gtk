@@ -151,6 +151,9 @@ static inline void
 nine_slice_grow (GskGLTextureNineSlice *slices,
                  int                    amount)
 {
+  if (amount == 0)
+    return;
+
   /* top left */
   slices[0].rect.x -= amount;
   slices[0].rect.y -= amount;
