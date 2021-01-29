@@ -184,12 +184,12 @@ static gboolean gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob     
                                                              GskGLRenderOffscreen *offscreen);
 
 static inline void
-init_full_texture_region (graphene_rect_t *rect)
+init_full_texture_region (GskGLRenderOffscreen *offscreen)
 {
-  rect->origin.x = 0;
-  rect->origin.y = 0;
-  rect->size.width = 1;
-  rect->size.height = 1;
+  offscreen->area.origin.x = 0;
+  offscreen->area.origin.y = 0;
+  offscreen->area.size.width = 1;
+  offscreen->area.size.height = 1;
 }
 
 static inline gboolean G_GNUC_PURE
@@ -1148,7 +1148,7 @@ blur_node (GskGLRenderJob       *job,
                                               texture_height * scale_y,
                                               blur_radius * scale_x,
                                               blur_radius * scale_y);
-      init_full_texture_region (&offscreen->area);
+      init_full_texture_region (offscreen);
     }
 
   *min_x = job->offset_x + node->bounds.origin.x - half_blur_extra;
@@ -1962,7 +1962,7 @@ gsk_gl_render_job_visit_blurred_inset_shadow_node (GskGLRenderJob *job,
       gsk_gl_render_state_restore (&state, job);
 
       offscreen.texture_id = render_target->texture_id;
-      init_full_texture_region (&offscreen.area);
+      init_full_texture_region (&offscreen);
 
       blurred_texture_id = blur_offscreen (job,
                                            &offscreen,
@@ -3124,7 +3124,7 @@ gsk_gl_render_job_upload_texture (GskGLRenderJob       *job,
   else
     {
       offscreen->texture_id = gsk_next_driver_load_texture (job->driver, texture, GL_LINEAR, GL_LINEAR);
-      init_full_texture_region (&offscreen->area);
+      init_full_texture_region (offscreen);
     }
 }
 
@@ -3484,7 +3484,7 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
     {
       /* Just to be safe. */
       offscreen->texture_id = 0;
-      init_full_texture_region (&offscreen->area);
+      init_full_texture_region (offscreen);
       offscreen->was_offscreen = FALSE;
       return FALSE;
     }
@@ -3513,7 +3513,7 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
   if (cached_id != 0)
     {
       offscreen->texture_id = cached_id;
-      init_full_texture_region (&offscreen->area);
+      init_full_texture_region (offscreen);
       /* We didn't render it offscreen, but hand out an offscreen texture id */
       offscreen->was_offscreen = TRUE;
       return TRUE;
@@ -3606,7 +3606,7 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
                                                                  render_target,
                                                                  FALSE);
 
-  init_full_texture_region (&offscreen->area);
+  init_full_texture_region (offscreen);
 
   if (!offscreen->do_not_cache)
     gsk_next_driver_cache_texture (job->driver, &key, offscreen->texture_id);
