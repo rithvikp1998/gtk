@@ -3594,6 +3594,7 @@ gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob       *job,
 
   job->offset_x = 0;
   job->offset_y = 0;
+  job->alpha = 1.0f;
 
   gsk_gl_render_job_visit_node (job, node);
 
