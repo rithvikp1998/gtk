@@ -3267,7 +3267,7 @@ gsk_gl_render_job_visit_repeat_node (GskGLRenderJob *job,
    * of the child texture... */
   if (rect_contains_rect (child_bounds, &node->bounds))
     {
-      gsk_gl_render_job_visit_clipped_child (job, child, child_bounds);
+      gsk_gl_render_job_visit_clipped_child (job, child, &node->bounds);
       return;
     }
 
