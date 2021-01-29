@@ -211,8 +211,12 @@ get_uniform (GskGLUniformState  *state,
   g_assert (program > 0);
   g_assert (array_count < 256);
   g_assert ((int)format >= 0 && format < GSK_GL_UNIFORM_FORMAT_LAST);
-  g_assert (location < GL_MAX_UNIFORM_LOCATIONS);
   g_assert (format > 0);
+  g_assert (location < GL_MAX_UNIFORM_LOCATIONS || location == (guint)-1);
+
+  /* Handle unused uniforms gracefully */
+  if (location == (guint)-1)
+    return NULL;
 
   /* Fast path for common case (state already initialized) */
   if G_LIKELY (program < state->program_info->len &&
