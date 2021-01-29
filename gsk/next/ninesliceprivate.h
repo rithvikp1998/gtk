@@ -24,6 +24,10 @@
 
 #include "gskgltexturepoolprivate.h"
 
+#if 0
+# define DEBUG_NINE_SLICE
+#endif
+
 G_BEGIN_DECLS
 
 enum {
@@ -113,7 +117,7 @@ nine_slice_rounded_rect (GskGLTextureNineSlice *slices,
   slices[8].rect.width = right_width;
   slices[8].rect.height = bottom_height;
 
-#ifdef G_ENABLE_DEBUG
+#ifdef DEBUG_NINE_SLICE
   /* These only hold true when the values from ceilf() above
    * are greater than one. Otherwise they fail, like will happen
    * with the node editor viewing the textures zoomed out.
@@ -142,7 +146,7 @@ nine_slice_to_texture_coords (GskGLTextureNineSlice *slices,
       slice->area.x2 = ((slice->rect.x + slice->rect.width) / fw);
       slice->area.y2 = (1.0 - (slice->rect.y / fh));
 
-#ifdef G_ENABLE_DEBUG
+#ifdef DEBUG_NINE_SLICE
       g_assert_cmpfloat (slice->area.x, >=, 0);
       g_assert_cmpfloat (slice->area.x, <=, 1);
       g_assert_cmpfloat (slice->area.y, >=, 0);
@@ -272,7 +276,10 @@ nine_slice_grow (GskGLTextureNineSlice *slices,
       slices[8].rect.height += amount;
     }
 
-#ifdef G_ENABLE_DEBUG
+#ifdef DEBUG_NINE_SLICE
+  /* These cannot be relied on in all cases right now, specifically
+   * when viewing data zoomed out.
+   */
   for (guint i = 0; i < 9; i ++)
     {
       g_assert_cmpint (slices[i].rect.x, >=, 0);
