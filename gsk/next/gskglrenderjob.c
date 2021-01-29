@@ -2891,11 +2891,15 @@ gsk_gl_render_job_visit_blend_node (GskGLRenderJob *job,
       return;
     }
 
+  g_assert (bottom_offscreen.was_offscreen);
+
   if (!gsk_gl_render_job_visit_node_with_offscreen (job, top_child, &top_offscreen))
     {
       gsk_gl_render_job_load_vertices_from_offscreen (job, &node->bounds, &bottom_offscreen);
       return;
     }
+
+  g_assert (top_offscreen.was_offscreen);
 
   gsk_gl_program_begin_draw (job->driver->blend,
                              &job->viewport,
