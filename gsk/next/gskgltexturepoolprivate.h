@@ -40,7 +40,12 @@ struct _GskGLTextureSlice
 struct _GskGLTextureNineSlice
 {
   cairo_rectangle_int_t rect;
-  graphene_rect_t area;
+  struct {
+    float x;
+    float y;
+    float x2;
+    float y2;
+  } area;
 };
 
 struct _GskGLTexture

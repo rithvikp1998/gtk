@@ -47,10 +47,6 @@
 #define ORTHO_FAR_PLANE     10000
 #define MAX_GRADIENT_STOPS  6
 #define SHADOW_EXTRA_SIZE   4
-#define X1(r) ((r)->origin.x)
-#define X2(r) ((r)->origin.x + (r)->size.width)
-#define Y1(r) ((r)->origin.y)
-#define Y2(r) ((r)->origin.y + (r)->size.height)
 
 #define rounded_rect_top_left(r)                                                        \
   (GRAPHENE_RECT_INIT(r->bounds.origin.x,                                               \
@@ -168,7 +164,12 @@ typedef struct _GskGLRenderModelview
 typedef struct _GskGLRenderOffscreen
 {
   const graphene_rect_t *bounds;
-  graphene_rect_t area;
+  struct {
+    float x;
+    float y;
+    float x2;
+    float y2;
+  } area;
   guint texture_id;
   guint force_offscreen : 1;
   guint reset_clip : 1;
@@ -186,10 +187,10 @@ static gboolean gsk_gl_render_job_visit_node_with_offscreen (GskGLRenderJob     
 static inline void
 init_full_texture_region (GskGLRenderOffscreen *offscreen)
 {
-  offscreen->area.origin.x = 0;
-  offscreen->area.origin.y = 0;
-  offscreen->area.size.width = 1;
-  offscreen->area.size.height = 1;
+  offscreen->area.x = 0;
+  offscreen->area.y = 0;
+  offscreen->area.x2 = 1;
+  offscreen->area.y2 = 1;
 }
 
 static inline gboolean G_GNUC_PURE
@@ -722,37 +723,37 @@ gsk_gl_render_job_load_vertices_from_offscreen (GskGLRenderJob             *job,
   float min_y = job->offset_y + bounds->origin.y;
   float max_x = min_x + bounds->size.width;
   float max_y = min_y + bounds->size.height;
-  float y1 = offscreen->was_offscreen ? Y2 (&offscreen->area) : Y1 (&offscreen->area);
-  float y2 = offscreen->was_offscreen ? Y1 (&offscreen->area) : Y2 (&offscreen->area);
+  float y1 = offscreen->was_offscreen ? offscreen->area.y2 : offscreen->area.y;
+  float y2 = offscreen->was_offscreen ? offscreen->area.y : offscreen->area.y2;
 
   vertices[0].position[0] = min_x;
   vertices[0].position[1] = min_y;
-  vertices[0].uv[0] = X1 (&offscreen->area);
+  vertices[0].uv[0] = offscreen->area.x;
   vertices[0].uv[1] = y1;
 
   vertices[1].position[0] = min_x;
   vertices[1].position[1] = max_y;
-  vertices[1].uv[0] = X1 (&offscreen->area);
+  vertices[1].uv[0] = offscreen->area.x;
   vertices[1].uv[1] = y2;
 
   vertices[2].position[0] = max_x;
   vertices[2].position[1] = min_y;
-  vertices[2].uv[0] = X2 (&offscreen->area);
+  vertices[2].uv[0] = offscreen->area.x2;
   vertices[2].uv[1] = y1;
 
   vertices[3].position[0] = max_x;
   vertices[3].position[1] = max_y;
-  vertices[3].uv[0] = X2 (&offscreen->area);
+  vertices[3].uv[0] = offscreen->area.x2;
   vertices[3].uv[1] = y2;
 
   vertices[4].position[0] = min_x;
   vertices[4].position[1] = max_y;
-  vertices[4].uv[0] = X1 (&offscreen->area);
+  vertices[4].uv[0] = offscreen->area.x;
   vertices[4].uv[1] = y2;
 
   vertices[5].position[0] = max_x;
   vertices[5].position[1] = min_y;
-  vertices[5].uv[0] = X2 (&offscreen->area);
+  vertices[5].uv[0] = offscreen->area.x2;
   vertices[5].uv[1] = y1;
 }
 
@@ -1005,8 +1006,8 @@ blur_offscreen (GskGLRenderJob       *job,
   g_assert (blur_radius_x > 0);
   g_assert (blur_radius_y > 0);
   g_assert (offscreen->texture_id > 0);
-  g_assert (offscreen->area.size.width > 0);
-  g_assert (offscreen->area.size.height > 0);
+  g_assert (offscreen->area.x2 > offscreen->area.x);
+  g_assert (offscreen->area.y2 > offscreen->area.y);
 
   if (!gsk_next_driver_create_render_target (job->driver,
                                              MAX (texture_to_blur_width, 1),
@@ -2003,10 +2004,10 @@ gsk_gl_render_job_visit_blurred_inset_shadow_node (GskGLRenderJob *job,
       }
 
     offscreen.was_offscreen = TRUE;
-    offscreen.area.origin.x = tx1;
-    offscreen.area.origin.y = ty1;
-    offscreen.area.size.width = tx2 - tx1;
-    offscreen.area.size.height = ty2 - ty1;
+    offscreen.area.x = tx1;
+    offscreen.area.y = ty1;
+    offscreen.area.x2 = tx2;
+    offscreen.area.y2 = ty2;
 
     gsk_gl_program_begin_draw (job->driver->blit,
                                &job->viewport,
@@ -2232,8 +2233,8 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
       gsk_gl_render_state_restore (&state, job);
 
       /* Now blur the outline */
+      init_full_texture_region (&offscreen);
       offscreen.texture_id = gsk_next_driver_release_render_target (job->driver, render_target, FALSE);
-      offscreen.area = GRAPHENE_RECT_INIT (0, 0, 1, 1);
       blurred_texture_id = blur_offscreen (job,
                                            &offscreen,
                                            texture_width,
@@ -2260,8 +2261,7 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
 
       offscreen.was_offscreen = FALSE;
       offscreen.texture_id = blurred_texture_id;
-      offscreen.area.origin.x = offscreen.area.origin.y = 0;
-      offscreen.area.size.width = offscreen.area.size.height = 1;
+      init_full_texture_region (&offscreen);
 
       gsk_gl_program_begin_draw (job->driver->outset_shadow,
                                  &job->viewport,
@@ -3119,7 +3119,10 @@ gsk_gl_render_job_upload_texture (GskGLRenderJob       *job,
 
       gsk_gl_icon_library_lookup_or_add (job->driver->icons, texture, &icon_data);
       offscreen->texture_id = GSK_GL_TEXTURE_ATLAS_ENTRY_TEXTURE (icon_data);
-      offscreen->area = icon_data->entry.area;
+      offscreen->area.x = icon_data->entry.area.origin.x;
+      offscreen->area.y = icon_data->entry.area.origin.y;
+      offscreen->area.x2 = icon_data->entry.area.origin.x + icon_data->entry.area.size.width;
+      offscreen->area.y2 = icon_data->entry.area.origin.y + icon_data->entry.area.size.height;
     }
   else
     {
@@ -3292,10 +3295,10 @@ gsk_gl_render_job_visit_repeat_node (GskGLRenderJob *job,
                                  UNIFORM_REPEAT_TEXTURE_RECT,
                                  1,
                                  (const float []) {
-                                   X1 (&offscreen.area),
-                                   offscreen.was_offscreen ? Y2 (&offscreen.area) : Y1 (&offscreen.area),
-                                   X2 (&offscreen.area),
-                                   offscreen.was_offscreen ? Y1 (&offscreen.area) : Y2 (&offscreen.area),
+                                   offscreen.area.x,
+                                   offscreen.was_offscreen ? offscreen.area.y2 : offscreen.area.y,
+                                   offscreen.area.x2,
+                                   offscreen.was_offscreen ? offscreen.area.y : offscreen.area.y2,
                                  });
   gsk_gl_render_job_load_vertices_from_offscreen (job, &node->bounds, &offscreen);
   gsk_gl_program_end_draw (job->driver->repeat);
