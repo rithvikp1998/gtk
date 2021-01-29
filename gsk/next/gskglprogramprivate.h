@@ -91,6 +91,17 @@ gsk_gl_program_set_uniform1fv (GskGLProgram *self,
 }
 
 static inline void
+gsk_gl_program_set_uniform2fv (GskGLProgram *self,
+                               guint         key,
+                               guint         count,
+                               const float  *values)
+{
+  gsk_gl_command_queue_set_uniform2fv (self->driver->command_queue, self->id,
+                                       gsk_gl_program_get_uniform_location (self, key),
+                                       count, values);
+}
+
+static inline void
 gsk_gl_program_set_uniform4fv (GskGLProgram *self,
                                guint         key,
                                guint         count,
