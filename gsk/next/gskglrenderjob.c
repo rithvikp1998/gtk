@@ -3139,6 +3139,8 @@ gsk_gl_render_job_upload_texture (GskGLRenderJob       *job,
       offscreen->texture_id = gsk_next_driver_load_texture (job->driver, texture, GL_LINEAR, GL_LINEAR);
       init_full_texture_region (offscreen);
     }
+
+  gsk_gl_command_queue_make_current (job->command_queue);
 }
 
 static void
@@ -3701,6 +3703,8 @@ gsk_gl_render_job_render (GskGLRenderJob *job,
   scale_factor = MAX (job->scale_x, job->scale_y);
   surface_height = job->viewport.size.height;
 
+  gsk_gl_command_queue_make_current (job->command_queue);
+
   /* Build the command queue using the shared GL context for all renderers
    * on the same display.
    */
@@ -3722,7 +3726,7 @@ gsk_gl_render_job_render (GskGLRenderJob *job,
    * that was provided to us when creating the render job as framebuffer 0
    * is bound to that context.
    */
-  gdk_gl_context_make_current (job->command_queue->context);
+  gsk_gl_command_queue_make_current (job->command_queue);
   gdk_gl_context_push_debug_group (job->command_queue->context, "Executing command queue");
   gsk_gl_command_queue_execute (job->command_queue, surface_height, scale_factor, job->region);
   gdk_gl_context_pop_debug_group (job->command_queue->context);

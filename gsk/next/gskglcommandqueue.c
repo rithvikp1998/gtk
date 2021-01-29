@@ -740,6 +740,8 @@ gsk_gl_command_queue_execute (GskGLCommandQueue    *self,
   if (self->batches->len == 0)
     return;
 
+  gsk_gl_command_queue_make_current (self);
+
   glEnable (GL_DEPTH_TEST);
   glDepthFunc (GL_LEQUAL);
 

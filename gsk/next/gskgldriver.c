@@ -529,8 +529,7 @@ gsk_next_driver_end_frame (GskNextDriver *self)
   g_return_if_fail (GSK_IS_NEXT_DRIVER (self));
   g_return_if_fail (self->in_frame == TRUE);
 
-  gdk_gl_context_make_current (self->command_queue->context);
-
+  gsk_gl_command_queue_make_current (self->command_queue);
   gsk_gl_command_queue_end_frame (self->command_queue);
 
   gsk_gl_texture_library_end_frame (GSK_GL_TEXTURE_LIBRARY (self->icons));
@@ -678,7 +677,6 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
                               int              min_filter,
                               int              mag_filter)
 {
-  GdkGLContext *previous_context = NULL;
   GdkGLContext *context;
   GdkTexture *downloaded_texture = NULL;
   GdkTexture *source_texture;
@@ -709,8 +707,6 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
       else
         {
           cairo_surface_t *surface;
-
-          previous_context = gdk_gl_context_get_current ();
 
           /* In this case, we have to temporarily make the texture's
            * context the current one, download its data into our context
@@ -762,9 +758,6 @@ gsk_next_driver_load_texture (GskNextDriver   *self,
                                       "GdkTexture<%p> %d", texture, t->texture_id);
 
   g_clear_object (&downloaded_texture);
-
-  if (previous_context)
-    gdk_gl_context_make_current (previous_context);
 
   return texture_id;
 }
