@@ -114,7 +114,13 @@ nine_slice_rounded_rect (GskGLTextureNineSlice *slices,
   slices[8].rect.height = bottom_height;
 
 #ifdef G_ENABLE_DEBUG
-  g_assert_cmpfloat (size->width, >=, left_width + right_width);
+  /* These only hold true when the values from ceilf() above
+   * are greater than one. Otherwise they fail, like will happen
+   * with the node editor viewing the textures zoomed out.
+   */
+  if (size->width > 1)
+    g_assert_cmpfloat (size->width, >=, left_width + right_width);
+  if (size->height > 1)
   g_assert_cmpfloat (size->height, >=, top_height + bottom_height);
 #endif
 }
@@ -277,7 +283,16 @@ nine_slice_grow (GskGLTextureNineSlice *slices,
 
   /* Rows don't overlap */
   for (guint i = 0; i < 3; i++)
-    g_assert_cmpint (slices[i * 3 + 0].rect.x + slices[i * 3 + 0].rect.width, <, slices[i * 3 + 1].rect.x);
+    {
+      int lhs = slices[i * 3 + 0].rect.x + slices[i * 3 + 0].rect.width;
+      int rhs = slices[i * 3 + 1].rect.x;
+
+      /* Ignore the case where we are scaled out and the
+       * positioning is degenerate, such as from node-editor.
+       */
+      if (rhs > 1)
+        g_assert_cmpint (lhs, <, rhs);
+    }
 #endif
 
 }
