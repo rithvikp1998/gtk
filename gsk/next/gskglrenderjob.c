@@ -1816,6 +1816,11 @@ static void
 gsk_gl_render_job_visit_unblurred_inset_shadow_node (GskGLRenderJob *job,
                                                      GskRenderNode  *node)
 {
+  const GskRoundedRect *outline = gsk_inset_shadow_node_get_outline (node);
+  GskRoundedRect transformed_outline;
+
+  gsk_gl_render_job_transform_rounded_rect (job, outline, &transformed_outline);
+
   gsk_gl_program_begin_draw (job->driver->inset_shadow,
                              &job->viewport,
                              &job->projection,
@@ -1824,7 +1829,7 @@ gsk_gl_render_job_visit_unblurred_inset_shadow_node (GskGLRenderJob *job,
                              job->alpha);
   gsk_gl_program_set_uniform_rounded_rect (job->driver->inset_shadow,
                                            UNIFORM_INSET_SHADOW_OUTLINE_RECT,
-                                           gsk_inset_shadow_node_get_outline (node));
+                                           &transformed_outline);
   gsk_gl_program_set_uniform_color (job->driver->inset_shadow,
                                     UNIFORM_INSET_SHADOW_COLOR,
                                     gsk_inset_shadow_node_get_color (node));
