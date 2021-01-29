@@ -986,6 +986,11 @@ gsk_gl_render_job_visit_as_fallback (GskGLRenderJob *job,
                              gsk_gl_render_job_get_modelview_matrix (job),
                              gsk_gl_render_job_get_clip (job),
                              job->alpha);
+  gsk_gl_program_set_uniform_texture (job->driver->blit,
+                                      UNIFORM_SHARED_SOURCE,
+                                      GL_TEXTURE_2D,
+                                      GL_TEXTURE0,
+                                      texture_id);
   gsk_gl_render_job_draw_offscreen_rect (job, &node->bounds);
   gsk_gl_program_end_draw (job->driver->blit);
 }
