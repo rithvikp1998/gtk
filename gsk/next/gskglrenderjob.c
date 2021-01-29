@@ -2128,7 +2128,7 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
   float blur_radius = gsk_outset_shadow_node_get_blur_radius (node);
   float blur_extra = blur_radius * 2.0f; /* 2.0 = shader radius_multiplier */
   float half_blur_extra = blur_extra / 2.0f;
-  int extra_blur_pixels = ceilf (blur_extra / 2.0 * scale_x);
+  int extra_blur_pixels = ceilf (half_blur_extra * scale_x);
   float spread = gsk_outset_shadow_node_get_spread (node);
   float dx = gsk_outset_shadow_node_get_dx (node);
   float dy = gsk_outset_shadow_node_get_dy (node);
@@ -2315,12 +2315,12 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
                                            &transformed_outline);
 
   {
-    const float min_x = floorf (outline->bounds.origin.x - spread - (blur_extra / 2.0) + dx);
-    const float min_y = floorf (outline->bounds.origin.y - spread - (blur_extra / 2.0) + dy);
+    const float min_x = floorf (outline->bounds.origin.x - spread - half_blur_extra + dx);
+    const float min_y = floorf (outline->bounds.origin.y - spread - half_blur_extra + dy);
     const float max_x = ceilf (outline->bounds.origin.x + outline->bounds.size.width +
-                               (blur_extra / 2.0) + dx + spread);
+                               half_blur_extra + dx + spread);
     const float max_y = ceilf (outline->bounds.origin.y + outline->bounds.size.height +
-                               (blur_extra / 2.0) + dy + spread);
+                               half_blur_extra + dy + spread);
     const GskGLTextureNineSlice *slices;
     GskGLTexture *texture;
 
