@@ -235,7 +235,10 @@ gsk_gl_texture_library_pack (GskGLTextureLibrary *self,
                              gpointer             key,
                              gsize                valuelen,
                              guint                width,
-                             guint                height)
+                             guint                height,
+                             int                  padding,
+                             guint               *out_packed_x,
+                             guint               *out_packed_y)
 {
   GskGLTextureAtlasEntry *entry;
   GskGLTextureAtlas *atlas = NULL;
@@ -243,6 +246,8 @@ gsk_gl_texture_library_pack (GskGLTextureLibrary *self,
   g_assert (GSK_IS_GL_TEXTURE_LIBRARY (self));
   g_assert (key != NULL);
   g_assert (valuelen > sizeof (GskGLTextureAtlasEntry));
+  g_assert (out_packed_x != NULL);
+  g_assert (out_packed_y != NULL);
 
   entry = g_slice_alloc0 (valuelen);
   entry->n_pixels = width * height;
@@ -260,6 +265,9 @@ gsk_gl_texture_library_pack (GskGLTextureLibrary *self,
       entry->area.y = 0.0f;
       entry->area.x2 = 0.0f;
       entry->area.y2 = 0.0f;
+
+      *out_packed_x = 0;
+      *out_packed_y = 0;
     }
   else if (width <= self->max_entry_size && height <= self->max_entry_size)
     {
@@ -267,18 +275,21 @@ gsk_gl_texture_library_pack (GskGLTextureLibrary *self,
       int packed_y;
 
       gsk_gl_texture_atlases_pack (self->driver,
-                                   width + 2,
-                                   height + 2,
+                                   width + padding,
+                                   height + padding,
                                    &atlas,
                                    &packed_x,
                                    &packed_y);
 
       entry->atlas = atlas;
       entry->is_atlased = TRUE;
-      entry->area.x = (float)(packed_x + 1) / atlas->width;
-      entry->area.y = (float)(packed_y + 1) / atlas->height;
+      entry->area.x = (float)(packed_x + padding) / atlas->width;
+      entry->area.y = (float)(packed_y + padding) / atlas->height;
       entry->area.x2 = entry->area.x + (float)width / atlas->width;
       entry->area.y2 = entry->area.y + (float)height / atlas->height;
+
+      *out_packed_x = packed_x;
+      *out_packed_y = packed_y;
     }
   else
     {
@@ -290,6 +301,9 @@ gsk_gl_texture_library_pack (GskGLTextureLibrary *self,
       entry->area.y = 0.0f;
       entry->area.x2 = 1.0f;
       entry->area.y2 = 1.0f;
+
+      *out_packed_x = 0;
+      *out_packed_y = 0;
     }
 
   g_hash_table_insert (self->hash_table, key, entry);

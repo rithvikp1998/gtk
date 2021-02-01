@@ -277,6 +277,8 @@ gsk_gl_glyph_library_add (GskGLGlyphLibrary      *self,
   GskGLGlyphValue *value;
   int width;
   int height;
+  guint packed_x;
+  guint packed_y;
 
   g_assert (GSK_IS_GL_GLYPH_LIBRARY (self));
   g_assert (key != NULL);
@@ -297,7 +299,9 @@ gsk_gl_glyph_library_add (GskGLGlyphLibrary      *self,
                                        key,
                                        sizeof *value,
                                        width,
-                                       height);
+                                       height,
+                                       0,
+                                       &packed_x, &packed_y);
 
   memcpy (&value->ink_rect, &ink_rect, sizeof ink_rect);
 

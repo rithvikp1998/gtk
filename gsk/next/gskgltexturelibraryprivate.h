@@ -121,7 +121,10 @@ gpointer gsk_gl_texture_library_pack        (GskGLTextureLibrary    *self,
                                              gpointer                key,
                                              gsize                   valuelen,
                                              guint                   width,
-                                             guint                   height);
+                                             guint                   height,
+                                             int                     padding,
+                                             guint                  *out_packed_x,
+                                             guint                  *out_packed_y);
 
 static inline void
 gsk_gl_texture_atlas_mark_unused (GskGLTextureAtlas *self,
