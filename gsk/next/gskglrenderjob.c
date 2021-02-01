@@ -2219,7 +2219,7 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
                                              render_target->framebuffer_id);
       gsk_gl_command_queue_clear (job->command_queue, 0, &job->viewport);
 
-      /* Draw using coloring program the outline */
+      /* Draw the outline using color program */
       gsk_gl_program_begin_draw (job->driver->color,
                                  &job->viewport,
                                  &job->projection,
