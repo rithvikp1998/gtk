@@ -126,6 +126,7 @@
 #include "gtkstylecontextprivate.h"
 #include "gtkroundedboxprivate.h"
 #include "gsk/gskroundedrectprivate.h"
+#include "gtkcssshadowvalueprivate.h"
 
 #define MNEMONICS_DELAY 300 /* ms */
 
@@ -432,6 +433,9 @@ create_popup_layout (GtkPopover *popover)
   GdkAnchorHints anchor_hints;
   GdkPopupLayout *layout;
   GtkWidget *parent;
+  GtkCssStyle *style;
+  GtkBorder shadow_width;
+  int tail_height = priv->has_arrow ? TAIL_HEIGHT : 0;
 
   parent = gtk_widget_get_parent (GTK_WIDGET (popover));
   gtk_widget_get_surface_allocation (parent, &rect);
@@ -443,9 +447,17 @@ create_popup_layout (GtkPopover *popover)
       rect.height = priv->pointing_to.height;
     }
 
+  style = gtk_css_node_get_style (gtk_widget_get_css_node (GTK_WIDGET (priv->contents_widget)));
+  gtk_css_shadow_value_get_extents (style->background->box_shadow, &shadow_width);
+
+  g_print ("popover shadow %d %d %d %d\n",
+           shadow_width.left, shadow_width.right,
+           shadow_width.top, shadow_width.bottom);
+
   switch (priv->position)
     {
     case GTK_POS_LEFT:
+      shadow_width.right = MAX (0, shadow_width.right - tail_height);
       switch (gtk_widget_get_valign (GTK_WIDGET (popover)))
         {
         case GTK_ALIGN_START:
@@ -470,6 +482,7 @@ create_popup_layout (GtkPopover *popover)
       break;
 
     case GTK_POS_RIGHT:
+      shadow_width.left = MAX (0, shadow_width.left - tail_height);
       switch (gtk_widget_get_valign (GTK_WIDGET (popover)))
         {
         case GTK_ALIGN_START:
@@ -494,6 +507,7 @@ create_popup_layout (GtkPopover *popover)
       break;
 
     case GTK_POS_TOP:
+      shadow_width.bottom = MAX (0, shadow_width.bottom - tail_height);
       switch (gtk_widget_get_halign (GTK_WIDGET (popover)))
         {
         case GTK_ALIGN_START:
@@ -518,6 +532,7 @@ create_popup_layout (GtkPopover *popover)
       break;
 
     case GTK_POS_BOTTOM:
+      shadow_width.top = MAX (0, shadow_width.top - tail_height);
       switch (gtk_widget_get_halign (GTK_WIDGET (popover)))
         {
         case GTK_ALIGN_START:
@@ -549,6 +564,14 @@ create_popup_layout (GtkPopover *popover)
                                  parent_anchor,
                                  surface_anchor);
   gdk_popup_layout_set_anchor_hints (layout, anchor_hints);
+  gdk_popup_layout_set_shadow_width (layout,
+                                     shadow_width.left,
+                                     shadow_width.right,
+                                     shadow_width.top,
+                                     shadow_width.bottom);
+  g_print ("popup shadow %d %d %d %d\n",
+           shadow_width.left, shadow_width.right,
+           shadow_width.top, shadow_width.bottom);
 
   if (priv->x_offset || priv->y_offset)
     gdk_popup_layout_set_offset (layout, priv->x_offset, priv->y_offset);
@@ -1302,13 +1325,21 @@ get_minimal_size (GtkPopover     *popover,
   GtkPositionType pos;
   int minimal_size;
   int tail_gap_width = priv->has_arrow ? TAIL_GAP_WIDTH : 0;
+  int min_width, min_height;
 
-  minimal_size = 2 * get_border_radius (GTK_WIDGET (popover));
+  minimal_size = 2 * get_border_radius (GTK_WIDGET (priv->contents_widget));
   pos = priv->position;
 
   if ((orientation == GTK_ORIENTATION_HORIZONTAL && POS_IS_VERTICAL (pos)) ||
       (orientation == GTK_ORIENTATION_VERTICAL && !POS_IS_VERTICAL (pos)))
     minimal_size += tail_gap_width;
+
+  gtk_widget_get_size_request (GTK_WIDGET (popover), &min_width, &min_height);
+
+  if (orientation == GTK_ORIENTATION_HORIZONTAL)
+    minimal_size = MAX (minimal_size, min_width);
+  else
+    minimal_size = MAX (minimal_size, min_height);
 
   return minimal_size;
 }
@@ -1326,9 +1357,15 @@ gtk_popover_measure (GtkWidget      *widget,
   GtkPopoverPrivate *priv = gtk_popover_get_instance_private (popover);
   int minimal_size;
   int tail_height = priv->has_arrow ? TAIL_HEIGHT : 0;
+  GtkCssStyle *style;
+  GtkBorder shadow_width;
+  int extra;
 
   if (for_size >= 0)
     for_size -= tail_height;
+
+  style = gtk_css_node_get_style (gtk_widget_get_css_node (GTK_WIDGET (priv->contents_widget)));
+  gtk_css_shadow_value_get_extents (style->background->box_shadow, &shadow_width);
 
   gtk_widget_measure (priv->contents_widget,
                       orientation, for_size,
@@ -1339,8 +1376,18 @@ gtk_popover_measure (GtkWidget      *widget,
   *minimum = MAX (*minimum, minimal_size);
   *natural = MAX (*natural, minimal_size);
 
-  *minimum += tail_height;
-  *natural += tail_height;
+  if (orientation == GTK_ORIENTATION_HORIZONTAL)
+    {
+      extra = MAX (0, tail_height - MIN (shadow_width.left, shadow_width.right));
+      *minimum += shadow_width.left + shadow_width.right + extra;
+      *natural += shadow_width.left + shadow_width.right + extra;
+    }
+  else
+    {
+      extra = MAX (0, tail_height - MIN (shadow_width.top, shadow_width.bottom));
+      *minimum += shadow_width.top + shadow_width.bottom + extra;
+      *natural += shadow_width.top + shadow_width.bottom + extra;
+    }
 }
 
 static void
@@ -1353,31 +1400,41 @@ gtk_popover_size_allocate (GtkWidget *widget,
   GtkPopoverPrivate *priv = gtk_popover_get_instance_private (popover);
   GtkAllocation child_alloc;
   int tail_height = priv->has_arrow ? TAIL_HEIGHT : 0;
+  GtkCssStyle *style;
+  GtkBorder shadow_width;
+
+  style = gtk_css_node_get_style (gtk_widget_get_css_node (GTK_WIDGET (priv->contents_widget)));
+  gtk_css_shadow_value_get_extents (style->background->box_shadow, &shadow_width);
 
   switch (priv->final_position)
     {
     case GTK_POS_TOP:
-      child_alloc.x = tail_height / 2;
-      child_alloc.y = 0;
+      child_alloc.x = shadow_width.left;
+      child_alloc.y = shadow_width.top;
+      child_alloc.width = width - (shadow_width.left + shadow_width.right);
+      child_alloc.height = height - (shadow_width.top + MAX (0, shadow_width.bottom - tail_height));
       break;
     case GTK_POS_BOTTOM:
-      child_alloc.x = tail_height / 2;
-      child_alloc.y = tail_height;
+      child_alloc.x = shadow_width.left;
+      child_alloc.y = MAX (0, shadow_width.top - tail_height);
+      child_alloc.width = width - (shadow_width.left + shadow_width.right);
+      child_alloc.height = height - (MAX (0, shadow_width.top - tail_height) + shadow_width.bottom);
       break;
     case GTK_POS_LEFT:
-      child_alloc.x = 0;
-      child_alloc.y = tail_height / 2;
+      child_alloc.x = shadow_width.left;
+      child_alloc.y = shadow_width.top;
+      child_alloc.width = width - (shadow_width.left + MAX (0, shadow_width.right - tail_height));
+      child_alloc.height = height - (shadow_width.top + shadow_width.bottom);
       break;
     case GTK_POS_RIGHT:
-      child_alloc.x = tail_height;
-      child_alloc.y = tail_height / 2;
+      child_alloc.x = MAX (0, shadow_width.left - tail_height);
+      child_alloc.y = shadow_width.top;
+      child_alloc.width = width - (MAX (0, shadow_width.left - tail_height) + shadow_width.right);
+      child_alloc.height = height - (shadow_width.top + shadow_width.bottom);
       break;
     default:
       break;
     }
-
-  child_alloc.width = width - tail_height;
-  child_alloc.height = height - tail_height;
 
   gtk_widget_size_allocate (priv->contents_widget, &child_alloc, baseline);
 
