@@ -148,7 +148,7 @@ typedef struct GskGLRenderState
 typedef struct _GskGLRenderClip
 {
   GskRoundedRect rect;
-  bool           is_rectilinear;
+  guint          is_rectilinear : 1;
 } GskGLRenderClip;
 
 typedef struct _GskGLRenderModelview
