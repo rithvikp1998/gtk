@@ -2730,7 +2730,7 @@ gsk_gl_render_job_visit_shadow_node (GskGLRenderJob *job,
       !color_matrix_modifies_alpha (shadow_child))
     shadow_child = gsk_color_matrix_node_get_child (shadow_child);
 
-  for (guint i = 0; i < n_shadows; i ++)
+  for (guint i = 0; i < n_shadows; i++)
     {
       const GskShadow *shadow = gsk_shadow_node_get_shadow (node, i);
       const float dx = shadow->dx;
@@ -3177,10 +3177,20 @@ gsk_gl_render_job_visit_texture_node (GskGLRenderJob *job,
       float max_y = min_y + node->bounds.size.height;
       float scale_x = (max_x - min_x) / texture->width;
       float scale_y = (max_y - min_y) / texture->height;
-      GskGLTextureSlice *slices;
-      guint n_slices;
+      GskGLTextureSlice *slices = NULL;
+      guint n_slices = 0;
 
       gsk_next_driver_slice_texture (job->driver, texture, &slices, &n_slices);
+
+      g_assert (slices != NULL);
+      g_assert (n_slices > 0);
+
+      gsk_gl_program_begin_draw (job->driver->blit,
+                                 &job->viewport,
+                                 &job->projection,
+                                 gsk_gl_render_job_get_modelview_matrix (job),
+                                 gsk_gl_render_job_get_clip (job),
+                                 job->alpha);
 
       for (guint i = 0; i < n_slices; i ++)
         {
@@ -3193,16 +3203,8 @@ gsk_gl_render_job_visit_texture_node (GskGLRenderJob *job,
           y1 = min_y + (scale_y * slice->rect.y);
           y2 = y1 + (slice->rect.height * scale_y);
 
-          /* TODO: We could avoid some compares here if we make a fast
-           * begin_draw variant which doesn't take shared uniform changes.
-           */
-
-          gsk_gl_program_begin_draw (job->driver->blit,
-                                     &job->viewport,
-                                     &job->projection,
-                                     gsk_gl_render_job_get_modelview_matrix (job),
-                                     gsk_gl_render_job_get_clip (job),
-                                     job->alpha);
+          if (i > 0)
+            gsk_gl_program_split_draw (job->driver->blit);
           gsk_gl_program_set_uniform_texture (job->driver->blit,
                                               UNIFORM_SHARED_SOURCE,
                                               GL_TEXTURE_2D,
@@ -3239,9 +3241,9 @@ gsk_gl_render_job_visit_texture_node (GskGLRenderJob *job,
           vertices[5].position[1] = y1;
           vertices[5].uv[0] = 1;
           vertices[5].uv[1] = 0;
-
-          gsk_gl_program_end_draw (job->driver->blit);
         }
+
+      gsk_gl_program_end_draw (job->driver->blit);
     }
 }
 
