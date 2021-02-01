@@ -225,11 +225,3 @@ gsk_gl_program_begin_draw (GskGLProgram            *self,
                                         self->alpha_location,
                                         alpha);
 }
-
-void
-gsk_gl_program_end_draw (GskGLProgram *self)
-{
-  g_assert (GSK_IS_GL_PROGRAM (self));
-
-  gsk_gl_command_queue_end_draw (self->driver->command_queue);
-}

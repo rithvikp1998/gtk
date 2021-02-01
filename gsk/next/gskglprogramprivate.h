@@ -67,7 +67,18 @@ void          gsk_gl_program_begin_draw  (GskGLProgram            *self,
                                           const graphene_matrix_t *modelview,
                                           const GskRoundedRect    *clip,
                                           float                    alpha);
-void          gsk_gl_program_end_draw    (GskGLProgram            *self);
+
+static inline void
+gsk_gl_program_end_draw (GskGLProgram *self)
+{
+  gsk_gl_command_queue_end_draw (self->driver->command_queue);
+}
+
+static inline void
+gsk_gl_program_split_draw (GskGLProgram *self)
+{
+  gsk_gl_command_queue_split_draw (self->driver->command_queue);
+}
 
 static inline int
 gsk_gl_program_get_uniform_location (GskGLProgram *self,

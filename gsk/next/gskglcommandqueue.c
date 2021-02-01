@@ -470,6 +470,46 @@ gsk_gl_command_queue_end_draw (GskGLCommandQueue *self)
   self->in_draw = FALSE;
 }
 
+/**
+ * gsk_gl_command_queue_split_draw:
+ * @self a #GskGLCommandQueue
+ *
+ * This function is like calling gsk_gl_command_queue_end_draw() followed by
+ * a gsk_gl_command_queue_begin_draw() with the same parameters as a
+ * previous begin draw (if shared uniforms where not changed further).
+ *
+ * This is useful to avoid comparisons inside of loops where we know shared
+ * uniforms are not changing.
+ *
+ * This generally should just be called from gsk_gl_program_split_draw()
+ * as that is where the begin/end flow happens from the render job.
+ */
+void
+gsk_gl_command_queue_split_draw (GskGLCommandQueue *self)
+{
+  GskGLCommandBatch *batch;
+  graphene_rect_t viewport;
+  guint program;
+
+  g_assert (GSK_IS_GL_COMMAND_QUEUE (self));
+  g_assert (self->batches->len > 0);
+  g_assert (self->in_draw == TRUE);
+
+  batch = &g_array_index (self->batches, GskGLCommandBatch, self->batches->len-1);
+
+  g_assert (batch->any.kind == GSK_GL_COMMAND_KIND_DRAW);
+
+  program = batch->any.program;
+
+  viewport.origin.x = 0;
+  viewport.origin.y = 0;
+  viewport.size.width = batch->any.viewport.width;
+  viewport.size.height = batch->any.viewport.height;
+
+  gsk_gl_command_queue_end_draw (self);
+  gsk_gl_command_queue_begin_draw (self, program, &viewport);
+}
+
 GskGLDrawVertex *
 gsk_gl_command_queue_add_vertices (GskGLCommandQueue     *self,
                                    const GskGLDrawVertex  vertices[GSK_GL_N_VERTICES])

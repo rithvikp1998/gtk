@@ -156,6 +156,7 @@ void               gsk_gl_command_queue_begin_draw           (GskGLCommandQueue 
                                                               guint                     program,
                                                               const graphene_rect_t    *viewport);
 void               gsk_gl_command_queue_end_draw             (GskGLCommandQueue        *self);
+void               gsk_gl_command_queue_split_draw           (GskGLCommandQueue        *self);
 GskGLDrawVertex   *gsk_gl_command_queue_add_vertices         (GskGLCommandQueue        *self,
                                                               const GskGLDrawVertex     vertices[GSK_GL_N_VERTICES]);
 
