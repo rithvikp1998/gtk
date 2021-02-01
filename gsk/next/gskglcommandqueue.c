@@ -166,6 +166,49 @@ G_STATIC_ASSERT (sizeof (GskGLCommandBatch) == 32);
 G_DEFINE_TYPE (GskGLCommandQueue, gsk_gl_command_queue, G_TYPE_OBJECT)
 
 static inline void
+gsk_gl_command_queue_print_batch (GskGLCommandQueue       *self,
+                                  const GskGLCommandBatch *batch)
+{
+  static const char *command_kinds[] = { "Clear", NULL, NULL, "Draw", };
+  guint framebuffer_id;
+
+  g_assert (GSK_IS_GL_COMMAND_QUEUE (self));
+  g_assert (batch != NULL);
+
+  if (batch->any.kind == GSK_GL_COMMAND_KIND_CLEAR)
+    framebuffer_id = batch->clear.framebuffer;
+  else if (batch->any.kind == GSK_GL_COMMAND_KIND_DRAW)
+    framebuffer_id = batch->draw.framebuffer;
+  else
+    return;
+
+  g_printerr ("Batch {\n");
+  g_printerr ("         Kind: %s\n", command_kinds[batch->any.kind]);
+  g_printerr ("     Viewport: %dx%d\n", batch->any.viewport.width, batch->any.viewport.height);
+  g_printerr ("  Framebuffer: %d\n", framebuffer_id);
+
+  if (batch->any.kind == GSK_GL_COMMAND_KIND_DRAW)
+    {
+      g_printerr ("      Program: %d\n", batch->any.program);
+
+      for (guint i = 0; i < batch->draw.bind_count; i++)
+        {
+          const GskGLCommandBind *bind = &g_array_index (self->batch_binds, GskGLCommandBind, batch->draw.bind_offset + i);
+          g_print ("      Bind[%d]: %u\n", bind->texture, bind->id);
+        }
+
+      for (guint i = 0; i < batch->draw.uniform_count; i++)
+        {
+          /* TODO: We could decode the format to print them too */
+          const GskGLCommandUniform *uniform = &g_array_index (self->batch_uniforms, GskGLCommandUniform, batch->draw.uniform_offset + i);
+          g_print ("  Uniform[%02d]: \n", uniform->location);
+        }
+    }
+
+  g_printerr ("}\n");
+}
+
+static inline void
 gsk_gl_command_queue_capture_png (GskGLCommandQueue *self,
                                   const char        *filename,
                                   guint              width,
@@ -930,6 +973,7 @@ gsk_gl_command_queue_execute (GskGLCommandQueue    *self,
                       framebuffer,
                       gdk_gl_context_get_current ());
           gsk_gl_command_queue_capture_png (self, filename, width, height, TRUE);
+          gsk_gl_command_queue_print_batch (self, batch);
         }
 #endif
 
