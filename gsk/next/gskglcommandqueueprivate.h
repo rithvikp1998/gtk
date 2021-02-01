@@ -146,8 +146,6 @@ gboolean           gsk_gl_command_queue_create_render_target (GskGLCommandQueue 
                                                               guint                    *out_texture_id);
 void               gsk_gl_command_queue_delete_program       (GskGLCommandQueue        *self,
                                                               guint                     program_id);
-void               gsk_gl_command_queue_bind_framebuffer     (GskGLCommandQueue        *self,
-                                                              guint                     framebuffer);
 void               gsk_gl_command_queue_clear                (GskGLCommandQueue        *self,
                                                               guint                     clear_bits,
                                                               const graphene_rect_t    *viewport);
@@ -160,6 +158,13 @@ void               gsk_gl_command_queue_begin_draw           (GskGLCommandQueue 
 void               gsk_gl_command_queue_end_draw             (GskGLCommandQueue        *self);
 GskGLDrawVertex   *gsk_gl_command_queue_add_vertices         (GskGLCommandQueue        *self,
                                                               const GskGLDrawVertex     vertices[GSK_GL_N_VERTICES]);
+
+static inline void
+gsk_gl_command_queue_bind_framebuffer (GskGLCommandQueue *self,
+                                       guint              framebuffer)
+{
+  gsk_gl_attachment_state_bind_framebuffer (self->attachments, framebuffer);
+}
 
 static inline void
 gsk_gl_command_queue_set_uniform1ui (GskGLCommandQueue *self,

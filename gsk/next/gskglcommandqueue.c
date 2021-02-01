@@ -1058,15 +1058,6 @@ gsk_gl_command_queue_create_framebuffer (GskGLCommandQueue *self)
   return fbo_id;
 }
 
-void
-gsk_gl_command_queue_bind_framebuffer (GskGLCommandQueue *self,
-                                       guint              framebuffer)
-{
-  g_return_if_fail (GSK_IS_GL_COMMAND_QUEUE (self));
-
-  gsk_gl_attachment_state_bind_framebuffer (self->attachments, framebuffer);
-}
-
 int
 gsk_gl_command_queue_upload_texture (GskGLCommandQueue *self,
                                      GdkTexture        *texture,
