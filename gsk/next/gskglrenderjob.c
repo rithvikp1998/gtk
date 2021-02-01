@@ -360,7 +360,7 @@ intersect_rounded_rectilinear (const graphene_rect_t *non_rounded,
    * rect in a trivial way. do that. */
   graphene_rect_intersection (non_rounded, &rounded->bounds, &result->bounds);
 
-  for (int i = 0; i < 4; i++)
+  for (guint i = 0; i < 4; i++)
     {
       if (corners[i])
         result->corner[i] = rounded->corner[i];
@@ -1711,7 +1711,6 @@ result_is_axis_aligned (GskTransform          *transform,
   graphene_rect_t b;
   graphene_point_t b1, b2;
   const graphene_point_t *p;
-  int i;
 
   gsk_transform_to_matrix (transform, &m);
   gsk_matrix_transform_rect (&m, bounds, &q);
@@ -1719,7 +1718,7 @@ result_is_axis_aligned (GskTransform          *transform,
   graphene_rect_get_top_left (&b, &b1);
   graphene_rect_get_bottom_right (&b, &b2);
 
-  for (i = 0; i < 4; i++)
+  for (guint i = 0; i < 4; i++)
     {
       p = graphene_quad_get_point (&q, i);
       if (fabs (p->x - b1.x) > FLT_EPSILON && fabs (p->x - b2.x) > FLT_EPSILON)
@@ -2454,17 +2453,17 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
   gsk_gl_program_end_draw (job->driver->outset_shadow);
 }
 
-static inline bool G_GNUC_PURE
+static inline gboolean G_GNUC_PURE
 equal_texture_nodes (GskRenderNode *node1,
                      GskRenderNode *node2)
 {
   if (gsk_render_node_get_node_type (node1) != GSK_TEXTURE_NODE ||
       gsk_render_node_get_node_type (node2) != GSK_TEXTURE_NODE)
-    return false;
+    return FALSE;
 
   if (gsk_texture_node_get_texture (node1) !=
       gsk_texture_node_get_texture (node2))
-    return false;
+    return FALSE;
 
   return graphene_rect_equal (&node1->bounds, &node2->bounds);
 }
