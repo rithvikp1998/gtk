@@ -327,7 +327,7 @@ intersect_rounded_rectilinear (const graphene_rect_t *non_rounded,
                                const GskRoundedRect  *rounded,
                                GskRoundedRect        *result)
 {
-  bool corners[4];
+  gboolean corners[4];
 
   /* Intersects with top left corner? */
   corners[0] = rounded_rect_has_corner (rounded, 0) &&
