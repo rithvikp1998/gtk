@@ -347,9 +347,9 @@ gsk_gl_command_queue_begin_draw (GskGLCommandQueue     *self,
 {
   GskGLCommandBatch *batch;
 
-  g_return_if_fail (GSK_IS_GL_COMMAND_QUEUE (self));
-  g_return_if_fail (self->in_draw == FALSE);
-  g_return_if_fail (viewport != NULL);
+  g_assert (GSK_IS_GL_COMMAND_QUEUE (self));
+  g_assert (self->in_draw == FALSE);
+  g_assert (viewport != NULL);
 
   batch = begin_next_batch (self);
   batch->any.kind = GSK_GL_COMMAND_KIND_DRAW;
@@ -393,9 +393,9 @@ gsk_gl_command_queue_end_draw (GskGLCommandQueue *self)
   GskGLCommandBatch *last_batch;
   GskGLCommandBatch *batch;
 
-  g_return_if_fail (GSK_IS_GL_COMMAND_QUEUE (self));
-  g_return_if_fail (self->batches->len > 0);
-  g_return_if_fail (self->in_draw == TRUE);
+  g_assert (GSK_IS_GL_COMMAND_QUEUE (self));
+  g_assert (self->batches->len > 0);
+  g_assert (self->in_draw == TRUE);
 
   if (self->batches->len > 1)
     last_batch = &g_array_index (self->batches, GskGLCommandBatch, self->batches->len - 2);
