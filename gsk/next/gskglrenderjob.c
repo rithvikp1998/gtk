@@ -2315,12 +2315,12 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
                                            &transformed_outline);
 
   {
-    const float min_x = floorf (outline->bounds.origin.x - spread - half_blur_extra + dx);
-    const float min_y = floorf (outline->bounds.origin.y - spread - half_blur_extra + dy);
-    const float max_x = ceilf (outline->bounds.origin.x + outline->bounds.size.width +
-                               half_blur_extra + dx + spread);
-    const float max_y = ceilf (outline->bounds.origin.y + outline->bounds.size.height +
-                               half_blur_extra + dy + spread);
+    float min_x = floorf (outline->bounds.origin.x - spread - half_blur_extra + dx);
+    float min_y = floorf (outline->bounds.origin.y - spread - half_blur_extra + dy);
+    float max_x = ceilf (outline->bounds.origin.x + outline->bounds.size.width +
+                         half_blur_extra + dx + spread);
+    float max_y = ceilf (outline->bounds.origin.y + outline->bounds.size.height +
+                         half_blur_extra + dy + spread);
     const GskGLTextureNineSlice *slices;
     GskGLTexture *texture;
 
@@ -2411,8 +2411,8 @@ gsk_gl_render_job_visit_blurred_outset_shadow_node (GskGLRenderJob *job,
     if (nine_slice_is_visible (&slices[NINE_SLICE_RIGHT_CENTER]))
       {
         memcpy (&offscreen.area, &slices[NINE_SLICE_RIGHT_CENTER].area, sizeof offscreen.area);
-        const float height = (max_y - min_y) - (slices[NINE_SLICE_TOP_RIGHT].rect.height / scale_y +
-                                                slices[NINE_SLICE_BOTTOM_RIGHT].rect.height / scale_y);
+        float height = (max_y - min_y) - (slices[NINE_SLICE_TOP_RIGHT].rect.height / scale_y +
+                                          slices[NINE_SLICE_BOTTOM_RIGHT].rect.height / scale_y);
         gsk_gl_render_job_load_vertices_from_offscreen (job,
                                                         &GRAPHENE_RECT_INIT (max_x - (slices[NINE_SLICE_RIGHT_CENTER].rect.width / scale_x),
                                                                              min_y + (slices[NINE_SLICE_TOP_LEFT].rect.height / scale_y),
