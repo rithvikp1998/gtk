@@ -2898,7 +2898,19 @@ gsk_gl_render_job_visit_blend_node (GskGLRenderJob *job,
 
   if (!gsk_gl_render_job_visit_node_with_offscreen (job, top_child, &top_offscreen))
     {
+      gsk_gl_program_begin_draw (job->driver->blit,
+                                 &job->viewport,
+                                 &job->projection,
+                                 gsk_gl_render_job_get_modelview_matrix (job),
+                                 gsk_gl_render_job_get_clip (job),
+                                 job->alpha);
+      gsk_gl_program_set_uniform_texture (job->driver->blit,
+                                          UNIFORM_SHARED_SOURCE,
+                                          GL_TEXTURE_2D,
+                                          GL_TEXTURE0,
+                                          bottom_offscreen.texture_id);
       gsk_gl_render_job_load_vertices_from_offscreen (job, &node->bounds, &bottom_offscreen);
+      gsk_gl_program_end_draw (job->driver->blit);
       return;
     }
 
