@@ -135,6 +135,8 @@ guint              gsk_next_driver_release_render_target (GskNextDriver        *
 void               gsk_next_driver_begin_frame           (GskNextDriver        *self,
                                                           GskGLCommandQueue    *command_queue);
 void               gsk_next_driver_end_frame             (GskNextDriver        *self);
+GdkTexture        *gsk_next_driver_create_gdk_texture    (GskNextDriver        *self,
+                                                          guint                 texture_id);
 guint              gsk_next_driver_lookup_texture        (GskNextDriver        *self,
                                                           const GskTextureKey  *key);
 void               gsk_next_driver_cache_texture         (GskNextDriver        *self,

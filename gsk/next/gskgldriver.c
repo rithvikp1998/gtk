@@ -41,6 +41,12 @@
 
 #define ATLAS_SIZE 512
 
+typedef struct _GskGLTextureState
+{
+  GdkGLContext *context;
+  GLuint        texture_id;
+} GskGLTextureState;
+
 G_DEFINE_TYPE (GskNextDriver, gsk_next_driver, G_TYPE_OBJECT)
 
 static guint
@@ -1274,4 +1280,50 @@ gsk_next_driver_release_texture_by_id (GskNextDriver *self,
 
   if ((texture = g_hash_table_lookup (self->textures, GUINT_TO_POINTER (texture_id))))
     gsk_next_driver_release_texture (self, texture);
+}
+
+
+static void
+create_texture_from_texture_destroy (gpointer data)
+{
+  GskGLTextureState *state = data;
+
+  g_assert (state != NULL);
+  g_assert (GDK_IS_GL_CONTEXT (state->context));
+
+  gdk_gl_context_make_current (state->context);
+  glDeleteTextures (1, &state->texture_id);
+  g_clear_object (&state->context);
+  g_slice_free (GskGLTextureState, state);
+}
+
+GdkTexture *
+gsk_next_driver_create_gdk_texture (GskNextDriver *self,
+                                    guint          texture_id)
+{
+  GskGLTextureState *state;
+  GskGLTexture *texture;
+
+  g_return_val_if_fail (GSK_IS_NEXT_DRIVER (self), NULL);
+  g_return_val_if_fail (self->command_queue != NULL, NULL);
+  g_return_val_if_fail (GDK_IS_GL_CONTEXT (self->command_queue->context), NULL);
+  g_return_val_if_fail (texture_id > 0, NULL);
+  g_return_val_if_fail (!g_hash_table_contains (self->texture_id_to_key, GUINT_TO_POINTER (texture_id)), NULL);
+
+  /* We must be tracking this texture_id already to use it */
+  if (!(texture = g_hash_table_lookup (self->textures, GUINT_TO_POINTER (texture_id))))
+    g_return_val_if_reached (NULL);
+
+  state = g_slice_new0 (GskGLTextureState);
+  state->texture_id = texture_id;
+  state->context = g_object_ref (self->command_queue->context);
+
+  g_hash_table_steal (self->textures, GUINT_TO_POINTER (texture_id));
+
+  return gdk_gl_texture_new (self->command_queue->context,
+                             texture_id,
+                             texture->width,
+                             texture->height,
+                             create_texture_from_texture_destroy,
+                             state);
 }
