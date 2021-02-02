@@ -1397,13 +1397,13 @@ gsk_gl_render_job_visit_rounded_clip_node (GskGLRenderJob *job,
 
   gsk_gl_render_job_transform_bounds (job, &clip->bounds, &transformed_clip.bounds);
 
-  for (guint i = 0; i < 4; i++)
+  for (guint i = 0; i < G_N_ELEMENTS (clip->corner); i++)
     {
       transformed_clip.corner[i].width = clip->corner[i].width * scale_x;
       transformed_clip.corner[i].height = clip->corner[i].height * scale_y;
     }
 
-  if (gsk_rounded_rect_is_rectilinear (clip))
+  if (gsk_rounded_rect_is_rectilinear (&current_clip))
     {
       GskRoundedRect intersected_clip;
 
