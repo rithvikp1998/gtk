@@ -10,18 +10,19 @@ printbackends_args = [
   '-D_GLIB_EXTERN=@0@'.format(visibility_define),
 ] + common_cflags
 
-cpdb_dep = cc.find_library('cpdb-libs-frontend', version : '>=1.0', required: get_option('print-cpdb'))
+cpdb_frontend_dep = cc.find_library('cpdb-libs-frontend', version : '>=1.0', required: get_option('print-cpdb'))
+cpdb_common_dep = cc.find_library('cpdb-libs-common', version: '>=1.0', required: get_option('print-cpdb'))
 cups_dep = dependency('cups', version : '>=2.0', required: get_option('print-cups'))
 
 # Use common print dialog backend if present. 
 # If not, use cups if present. 
 # If not, use lpr.
-if cpdb_dep.found()
+if cpdb_frontend_dep.found() and cpdb_common_dep.found()
   print_backends += 'cpdb'
   shared_module('printbackend-cpdb',
     sources: 'gtkprintbackendcpdb.c',
     c_args: printbackends_args,
-    dependencies: libgtk_dep,
+    dependencies: [libgtk_dep, cpdb_frontend_dep, cpdb_common_dep],
     install_dir: printbackends_install_dir,
     install: true,
   )
