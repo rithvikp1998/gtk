@@ -11,36 +11,29 @@ G_BEGIN_DECLS
 #define GTK_PRINT_BACKEND_CPDB(obj)             (G_TYPE_CHECK_INSTANCE_CAST ((obj), GTK_TYPE_PRINT_BACKEND_CPDB, GtkPrintBackendCpdb))
 #define GTK_IS_PRINT_BACKEND_CPDB(obj)          (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GTK_TYPE_PRINT_BACKEND_CPDB))
 
-typedef struct _GtkPrintBackendCpdb      GtkPrintBackendCpdb;
-
-GtkPrintBackend *gtk_print_backend_cpdb_new      (void);
-GType          gtk_print_backend_cpdb_get_type (void) G_GNUC_CONST;
-
-static void cpdb_get_printer_list(GtkPrintBackend *backend);
-
-typedef struct _GtkPrintBackendCpdbClass GtkPrintBackendCpdbClass;
-
 #define GTK_PRINT_BACKEND_CPDB_CLASS(klass)     (G_TYPE_CHECK_CLASS_CAST ((klass), GTK_TYPE_PRINT_BACKEND_CPDB, GtkPrintBackendCpdbClass))
 #define GTK_IS_PRINT_BACKEND_CPDB_CLASS(klass)  (G_TYPE_CHECK_CLASS_TYPE ((klass), GTK_TYPE_PRINT_BACKEND_CPDB))
 #define GTK_PRINT_BACKEND_CPDB_GET_CLASS(obj)   (G_TYPE_INSTANCE_GET_CLASS ((obj), GTK_TYPE_PRINT_BACKEND_CPDB, GtkPrintBackendCpdbClass))
 
-struct _GtkPrintBackendCpdbClass
+typedef struct _GtkPrintBackendCpdbClass
 {
-    GtkPrintBackendClass parent_class;
-};
+  GtkPrintBackendClass parent_class;
+} GtkPrintBackendCpdbClass;
 
-struct _GtkPrintBackendCpdb
+typedef struct _GtkPrintBackendCpdb
 {
-    GtkPrintBackend parent_instance;
-};
+  GtkPrintBackend parent_instance;
+} GtkPrintBackendCpdb;
 
 static GObjectClass *backend_parent_class;
-
 static FrontendObj *frontendObj;
-static int add_printer_callback(PrinterObj *p);
-static int remove_printer_callback(PrinterObj *p);
-
 static GtkPrintBackend *gtkPrintBackend;
+
+GtkPrintBackend *gtk_print_backend_cpdb_new (void);
+GType gtk_print_backend_cpdb_get_type (void) G_GNUC_CONST;
+G_DEFINE_DYNAMIC_TYPE (GtkPrintBackendCpdb, gtk_print_backend_cpdb, GTK_TYPE_PRINT_BACKEND)
+
+static void                 cpdb_get_printer_list                  (GtkPrintBackend *backend);
 
 static void                 cpdb_printer_get_settings_from_options (GtkPrinter              *printer,
                                                                    GtkPrinterOptionSet     *options,
@@ -64,6 +57,9 @@ static void                 gtk_print_backend_cpdb_print_stream    (GtkPrintBack
                                                                    GtkPrintJobCompleteFunc  callback,
                                                                    gpointer                 user_data,
                                                                    GDestroyNotify           dnotify);
+
+static int add_printer_callback(PrinterObj *p);
+static int remove_printer_callback(PrinterObj *p);
 
 G_END_DECLS
 

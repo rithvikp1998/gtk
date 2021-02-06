@@ -5,8 +5,6 @@
 #include <glib/gi18n-lib.h>
 #include <cpdb-libs-frontend.h>
 
-G_DEFINE_DYNAMIC_TYPE (GtkPrintBackendCpdb, gtk_print_backend_cpdb, GTK_TYPE_PRINT_BACKEND)
-
 void
 g_io_module_load (GIOModule *module)
 {
@@ -69,6 +67,54 @@ gtk_print_backend_cpdb_init (GtkPrintBackendCpdb *backend)
   connect_to_dbus(frontendObj);
 }
 
+static void
+cpdb_get_printer_list(GtkPrintBackend *backend)
+{
+  gtkPrintBackend = GTK_PRINT_BACKEND (backend);
+  refresh_printer_list(frontendObj);
+}
+
+static void cpdb_printer_get_settings_from_options (GtkPrinter *printer,
+                                                    GtkPrinterOptionSet *options,
+                                                    GtkPrintSettings *settings)
+{
+
+}
+
+static GtkPrinterOptionSet *cpdb_printer_get_options (GtkPrinter *printer,
+                                                      GtkPrintSettings *settings,
+                                                      GtkPageSetup *page_setup,
+                                                      GtkPrintCapabilities capabilities)
+{
+  return gtk_printer_option_set_new();
+}
+
+static void cpdb_printer_prepare_for_print (GtkPrinter *printer,
+                                            GtkPrintJob *print_job,
+                                            GtkPrintSettings *settings,
+                                            GtkPageSetup *page_setup)
+{
+}
+
+static cairo_surface_t * cpdb_printer_create_cairo_surface (GtkPrinter *printer,
+                                                            GtkPrintSettings *settings,
+                                                            double width,
+                                                            double height,
+                                                            GIOChannel *cache_io)
+{
+  cairo_surface_t *surface;
+  return surface;
+}
+
+static void gtk_print_backend_cpdb_print_stream (GtkPrintBackend *print_backend,
+                                                 GtkPrintJob *job,
+                                                 GIOChannel *data_io,
+                                                 GtkPrintJobCompleteFunc callback,
+                                                 gpointer user_data,
+                                                 GDestroyNotify dnotify)
+{
+}
+
 static GtkPrinter *get_gtk_printer_from_printer_obj(PrinterObj *p) {
   GtkPrinter *printer;
 
@@ -100,51 +146,4 @@ static int remove_printer_callback(PrinterObj *p)
 {
   g_message("Removed Printer %s : %s!\n", p->name, p->backend_name);
   return 0;
-}
-
-static void
-cpdb_get_printer_list(GtkPrintBackend *backend)
-{
-  gtkPrintBackend = GTK_PRINT_BACKEND (backend);
-  refresh_printer_list(frontendObj);
-}
-
-static void                 cpdb_printer_get_settings_from_options (GtkPrinter              *printer,
-                                                                    GtkPrinterOptionSet     *options,
-                                                                    GtkPrintSettings        *settings)
-{
-}
-
-static GtkPrinterOptionSet *cpdb_printer_get_options               (GtkPrinter              *printer,
-                                                                    GtkPrintSettings        *settings,
-                                                                    GtkPageSetup            *page_setup,
-                                                                    GtkPrintCapabilities     capabilities)
-{
-  return gtk_printer_option_set_new();
-}
-
-static void                 cpdb_printer_prepare_for_print         (GtkPrinter              *printer,
-                                                                    GtkPrintJob             *print_job,
-                                                                    GtkPrintSettings        *settings,
-                                                                    GtkPageSetup            *page_setup)
-{
-}
-
-static cairo_surface_t *    cpdb_printer_create_cairo_surface      (GtkPrinter              *printer,
-                                                                    GtkPrintSettings        *settings,
-                                                                    double                   width,
-                                                                    double                   height,
-                                                                    GIOChannel              *cache_io)
-{
-  cairo_surface_t *surface;
-  return surface;
-}
-
-static void                 gtk_print_backend_cpdb_print_stream    (GtkPrintBackend         *print_backend,
-                                                                    GtkPrintJob             *job,
-                                                                    GIOChannel              *data_io,
-                                                                    GtkPrintJobCompleteFunc  callback,
-                                                                    gpointer                 user_data,
-                                                                    GDestroyNotify           dnotify)
-{
 }
