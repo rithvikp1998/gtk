@@ -74,12 +74,57 @@ cpdb_get_printer_list(GtkPrintBackend *backend)
   refresh_printer_list(frontendObj);
 }
 
-static void cpdb_printer_get_settings_from_options (GtkPrinter *printer,
-                                                    GtkPrinterOptionSet *options,
-                                                    GtkPrintSettings *settings)
-{
 
-}
+static void
+cpdb_printer_get_settings_from_options (GtkPrinter *printer,
+                                        GtkPrinterOptionSet *options,
+                                        GtkPrintSettings *settings)
+{
+    GtkPrinterOption *option;
+
+    option = gtk_printer_option_set_lookup(options, "gtk-n-up");
+    if (option)
+      gtk_print_settings_set ( settings, GTK_PRINT_SETTINGS_NUMBER_UP, option->value );
+
+    option = gtk_printer_option_set_lookup( options, "gtk-n-up-layout");
+    if (option)
+      gtk_print_settings_set( settings, GTK_PRINT_SETTINGS_NUMBER_UP_LAYOUT, option->value);
+
+    ppd_file_t *ppd_file = gtk_print_cups_get_ppd(GTK_PRINTER_CUPS(printer));
+    if ( ppd_file != NULL)
+    {
+      GtkPrinterOption *cover_before, *cover_after;
+      cover_before = gtk_printer_option_set_lookup (options, "gtk-cover-before");
+      cover_after = gtk_printer_option_set_lookup (options, "gtk-cover-after");
+
+      if (cover_before && cover_after)
+      {
+        char *value = g_strdup_printf ("%s,%s", cover_before->value, cover_after->value);
+        gtk_print_settings_set (settings, "cups-job-sheets", value);
+        g_free (value);
+      }
+
+      print_at = gtk_print_settings_get (settings, "print-at");
+      print_at_time = gtk_print_settings_get (settings, "print-at-time");
+
+      if (strcmp (print_at, "at") == 0)
+      {
+        char *utc_time = NULL;
+        utc_time = localtime_to_utctime (print_at_time);
+
+        if (utc_time != NULL)
+        {
+          gtk_print_settings_set (settings, "cups-job-hold-until", utc_time);
+          g_free (utc_time);
+        }
+        else
+          gtk_print_settings_set (settings, "cups-job-hold-until", print_at_time);
+      }
+      else if (strcmp (print_at, "on-hold") == 0)
+        gtk_print_settings_set (settings, "cups-job-hold-until", "indefinite");
+    }
+ }
+
 
 static GtkPrinterOptionSet *cpdb_printer_get_options (GtkPrinter *printer,
                                                       GtkPrintSettings *settings,
