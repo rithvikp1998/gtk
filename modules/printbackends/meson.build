@@ -54,7 +54,8 @@ endif
 
 rest_dep = dependency('rest-0.7', required : get_option('print-cloudprint'))
 json_glib_dep = dependency('json-glib-1.0', required : get_option('print-cloudprint'))
-if rest_dep.found() and json_glib_dep.found()
+# If cpdb is already installed, it will take care of google cloud print too.
+if rest_dep.found() and json_glib_dep.found() and not (cpdb_frontend_dep.found() and cpdb_common_dep.found())
   print_backends += 'cloudprint'
   shared_module('printbackend-cloudprint',
     sources: [

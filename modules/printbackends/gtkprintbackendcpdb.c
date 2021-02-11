@@ -120,15 +120,23 @@ static GtkPrinter *get_gtk_printer_from_printer_obj(PrinterObj *p) {
 
   printer = g_object_new (GTK_TYPE_PRINTER,
                           "name", p->name,
-                          "backend", GTK_PRINT_BACKEND_CPDB (gtkPrintBackend),
-                          "is-virtual", FALSE,
-                          "accepts-pdf", TRUE,
-                          "accepts-ps", TRUE,
-                          NULL);
-  gtk_printer_set_has_details (printer, TRUE);
+                          "backend", GTK_PRINT_BACKEND_CPDB (gtkPrintBackend));
+
   gtk_printer_set_icon_name (printer, "printer");
+  gtk_printer_set_state_message(printer, p->state);
+  gtk_printer_set_location(printer, p->location);
+  gtk_printer_set_description(printer, p->info);
+  gtk_printer_set_is_accepting_jobs(printer, p->is_accepting_jobs);
+  gtk_printer_set_job_count(printer, get_active_jobs_count(p));
+
+  gtk_printer_set_has_details (printer, TRUE);
   gtk_printer_set_is_active (printer, TRUE);
-  gtk_printer_set_is_default (printer, TRUE);
+  // Given GCP is going to be deprecated, the CUPS default printer wil be overall default.
+  if (strcmp(p->backend_name, "CUPS") == 0 &&
+      strcmp(get_default_printer(frontendObj, p->backend_name), p->name) == 0)
+  {
+    gtk_printer_set_is_default (printer, TRUE);
+  }
   return printer;
 }
 
