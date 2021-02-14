@@ -86,7 +86,35 @@ static GtkPrinterOptionSet *cpdb_printer_get_options (GtkPrinter *printer,
                                                       GtkPageSetup *page_setup,
                                                       GtkPrintCapabilities capabilities)
 {
-  return gtk_printer_option_set_new();
+  GtkPrinterOption *option;
+  GtkPrinterOptionSet *set = gtk_printer_option_set_new();
+
+  // CPDB Option CPD_OPTION_NUMBER_UP
+  const char *n_up[] = {"1", "2", "4", "6", "9", "16" };
+  option = gtk_printer_option_new ("gtk-n-up", C_("printer option", "Pages per Sheet"), GTK_PRINTER_OPTION_TYPE_PICKONE);
+  gtk_printer_option_choices_from_array (option, G_N_ELEMENTS (n_up), n_up, n_up);
+  gtk_printer_option_set (option, "1");
+  gtk_printer_option_set_add (set, option);
+
+  // CPDB Option CPD_OPTION_JOB_PRIORITY
+  const char *priority[] = {"100", "80", "50", "30" };
+  const char *priority_display[] = {N_("Urgent"), N_("High"), N_("Medium"), N_("Low") };
+  option = gtk_printer_option_new ("gtk-job-prio", _("Job Priority"), GTK_PRINTER_OPTION_TYPE_PICKONE);
+  gtk_printer_option_choices_from_array (option, G_N_ELEMENTS (priority), priority, priority_display);
+  gtk_printer_option_set (option, "50");
+  gtk_printer_option_set_add (set, option);
+  g_object_unref (option);
+
+  // CPDB Option CPD_OPTION_SIDES
+  const char *sides[] = {"one-sided", "two-sided-short", "two-sided-long"};
+  const char *sides_display[] = {N_("One Sided"), N_("Long Edged (Standard)"), N_("Short Edged (Flip)")};
+  option = gtk_printer_option_new ("gtk-duplex", _("Duplex Printing"), GTK_PRINTER_OPTION_TYPE_PICKONE);
+  gtk_printer_option_choices_from_array (option, G_N_ELEMENTS (sides), sides, sides_display);
+  gtk_printer_option_set (option, "one-sided");
+  gtk_printer_option_set_add (set, option);
+  g_object_unref (option);
+
+  return set;
 }
 
 static void cpdb_printer_prepare_for_print (GtkPrinter *printer,
