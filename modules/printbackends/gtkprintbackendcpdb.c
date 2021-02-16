@@ -57,6 +57,7 @@ gtk_print_backend_cpdb_class_init (GtkPrintBackendCpdbClass *class)
 static void
 gtk_print_backend_cpdb_class_finalize (GtkPrintBackendCpdbClass *class)
 {
+
 }
 
 static void
@@ -90,40 +91,8 @@ cpdb_printer_get_settings_from_options (GtkPrinter *printer,
     if (option)
       gtk_print_settings_set( settings, GTK_PRINT_SETTINGS_NUMBER_UP_LAYOUT, option->value);
 
-    ppd_file_t *ppd_file = gtk_print_cups_get_ppd(GTK_PRINTER_CUPS(printer));
-    if ( ppd_file != NULL)
-    {
-      GtkPrinterOption *cover_before, *cover_after;
-      cover_before = gtk_printer_option_set_lookup (options, "gtk-cover-before");
-      cover_after = gtk_printer_option_set_lookup (options, "gtk-cover-after");
-
-      if (cover_before && cover_after)
-      {
-        char *value = g_strdup_printf ("%s,%s", cover_before->value, cover_after->value);
-        gtk_print_settings_set (settings, "cups-job-sheets", value);
-        g_free (value);
-      }
-
-      print_at = gtk_print_settings_get (settings, "print-at");
-      print_at_time = gtk_print_settings_get (settings, "print-at-time");
-
-      if (strcmp (print_at, "at") == 0)
-      {
-        char *utc_time = NULL;
-        utc_time = localtime_to_utctime (print_at_time);
-
-        if (utc_time != NULL)
-        {
-          gtk_print_settings_set (settings, "cups-job-hold-until", utc_time);
-          g_free (utc_time);
-        }
-        else
-          gtk_print_settings_set (settings, "cups-job-hold-until", print_at_time);
-      }
-      else if (strcmp (print_at, "on-hold") == 0)
-        gtk_print_settings_set (settings, "cups-job-hold-until", "indefinite");
-    }
- }
+    
+}
 
 
 static GtkPrinterOptionSet *cpdb_printer_get_options (GtkPrinter *printer,
@@ -139,6 +108,99 @@ static void cpdb_printer_prepare_for_print (GtkPrinter *printer,
                                             GtkPrintSettings *settings,
                                             GtkPageSetup *page_setup)
 {
+  double scale;
+  GtkPrintPages pages;
+  GtkPageRange *ranges;
+  GtkPageSet page_set;
+  GtkPaperSize *paper_size;
+  const char *ppd_paper_name;
+  int n_ranges;
+
+
+  pages = gtk_print_settings_get_print_pages (settings);
+  gtk_print_job_set_pages (print_job, pages);
+  if ( pages == GTK_PRINT_PAGES_RANGES )
+    ranges = gtk_print_settings_get_page_ranges ( settings, &n_ranges );
+  else
+  {
+    ranges = NULL;
+    n_ranges = 0;
+  }
+  gtk_print_job_set_page_ranges (print_job, ranges, n_ranges);
+  
+  gtk_print_job_set_collate (print_job, gtk_print_settings_get_collate (settings));
+  gtk_print_job_set_reverse (print_job, gtk_print_settings_get_reverse (settings));
+  gtk_print_job_set_num_copies (print_job, gtk_print_settings_get_n_copies (settings));
+  gtk_print_job_set_n_up (print_job, gtk_print_settings_get_number_up (settings));
+  gtk_print_job_set_n_up_layout (print_job, gtk_print_settings_get_number_up_layout (settings));
+  gtk_print_job_set_rotate (print_job, TRUE);
+
+  scale = gtk_print_settings_get_scale (settings);
+  if (scale != 100.0)
+    gtk_print_job_set_scale (print_job, scale / 100.0);
+
+  page_set = gtk_print_settings_get_page_set (settings);
+  if (page_set == GTK_PAGE_SET_EVEN)
+    gtk_print_settings_set (settings, "cpdb-page-set", "even");
+  else if (page_set == GTK_PAGE_SET_ODD)
+    gtk_print_settings_set (settings, "cpdb-page-set", "odd");
+  gtk_print_job_set_page_set (print_job, GTK_PAGE_SET_ALL);
+
+  paper_size = gtk_page_setup_get_paper_size (page_setup);
+  ppd_paper_name = gtk_paper_size_get_ppd_name (paper_size);
+
+  if (ppd_paper_name != NULL)
+    gtk_print_settings_set (settings, "cpdb-PageSize", ppd_paper_name);
+  else if (gtk_paper_size_is_ipp (paper_size))
+    gtk_print_settings_set (settings, "cpdb-media", gtk_paper_size_get_name (paper_size));
+  else
+    {
+      char width[G_ASCII_DTOSTR_BUF_SIZE];
+      char height[G_ASCII_DTOSTR_BUF_SIZE];
+      char *custom_name;
+
+      g_ascii_formatd (width, sizeof (width), "%.2f", gtk_paper_size_get_width (paper_size, GTK_UNIT_POINTS));
+      g_ascii_formatd (height, sizeof (height), "%.2f", gtk_paper_size_get_height (paper_size, GTK_UNIT_POINTS));
+      custom_name = g_strdup_printf (("Custom.%sx%s"), width, height);
+      gtk_print_settings_set (settings, "cpdb-PageSize", custom_name);
+      g_free (custom_name);
+    }
+
+  if (gtk_print_settings_get_number_up (settings) > 1)
+    {
+      GtkNumberUpLayout  layout = gtk_print_settings_get_number_up_layout (settings);
+      GEnumClass        *enum_class;
+      GEnumValue        *enum_value;
+
+      switch (gtk_page_setup_get_orientation (page_setup))
+        {
+          case GTK_PAGE_ORIENTATION_LANDSCAPE:
+            if (layout < 4)
+              layout = layout + 2 + 4 * (1 - layout / 2);
+            else
+              layout = layout - 3 - 2 * (layout % 2);
+            break;
+          case GTK_PAGE_ORIENTATION_REVERSE_PORTRAIT:
+            layout = (layout + 3 - 2 * (layout % 2)) % 4 + 4 * (layout / 4);
+            break;
+          case GTK_PAGE_ORIENTATION_REVERSE_LANDSCAPE:
+            if (layout < 4)
+              layout = layout + 5 - 2 * (layout % 2);
+            else
+              layout = layout - 6 + 4 * (1 - (layout - 4) / 2);
+            break;
+
+          case GTK_PAGE_ORIENTATION_PORTRAIT:
+          default:
+            break;
+        }
+
+      enum_class = g_type_class_ref (GTK_TYPE_NUMBER_UP_LAYOUT);
+      enum_value = g_enum_get_value (enum_class, layout);
+      gtk_print_settings_set (settings, "cpdb-number-up-layout", enum_value->value_nick);
+      g_type_class_unref (enum_class);
+    }
+  
 }
 
 static cairo_surface_t * cpdb_printer_create_cairo_surface (GtkPrinter *printer,
