@@ -1,9 +1,9 @@
 #ifndef __GTK_PRINT_BACKEND_CPDB_H__
 #define __GTK_PRINT_BACKEND_CPDB_H__
 
-#include <glib-object.h>
 #include "gtkprintbackendprivate.h"
 #include <cpdb-libs-frontend.h>
+#include <glib-object.h>
 
 G_BEGIN_DECLS
 
@@ -16,8 +16,8 @@ G_BEGIN_DECLS
 #define GTK_IS_PRINT_BACKEND_CPDB_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GTK_TYPE_PRINT_BACKEND_CPDB))
 #define GTK_PRINT_BACKEND_CPDB_GET_CLASS(obj) (G_TYPE_INSTANCE_GET_CLASS ((obj), GTK_TYPE_PRINT_BACKEND_CPDB, GtkPrintBackendCpdbClass))
 
-
-GType gtk_printer_cpdb_get_type (void)
+GType
+gtk_printer_cpdb_get_type (void)
 {
   return gtk_printer_cpdb_type;
 }
@@ -251,7 +251,7 @@ typedef struct _GtkCpdbConnectionTest
   http_addrlist_t *current_addr;
   http_addrlist_t *last_wrong_addr;
   int socket;
-}GtkCpdbConnectionTest;
+} GtkCpdbConnectionTest;
 
 typedef struct _CpdbPrintStreamData
 {
