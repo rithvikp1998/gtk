@@ -7,6 +7,7 @@
 #include <cups/ipp.h>
 #include <cups/language.h>
 #include <glib.h>
+#include <cpdb-libs-frontend.h>
 
 G_BEGIN_DECLS
 

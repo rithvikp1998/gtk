@@ -4,8 +4,8 @@
 #include "gtkcpdbutils.h"
 #include <cups/cups.h>
 #include <cups/ppd.h>
-#include <glib-object.h>
-
+#include <glib-object.h>cd 
+#include <cpdb-libs-frontend.h>
 #include <gtk/gtkprinterprivate.h>
 #include <gtk/gtkunixprint.h>
 

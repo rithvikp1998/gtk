@@ -563,11 +563,11 @@ gtk_printer_cpdb_new (const char *name,
   gboolean accepts_pdf;
   GtkPrinterCpdb *printer;
 
-#if (CPDB_VERSION_MAJOR == 1 && CPDB_VERSION_MINOR >= 2) || CPDB_VERSION_MAJOR > 1
-  accepts_pdf = TRUE;
-#else
-  accepts_pdf = FALSE;
-#endif
+  // #if (CPDB_VERSION_MAJOR == 1 && CPDB_VERSION_MINOR >= 2) || CPDB_VERSION_MAJOR > 1
+  //   accepts_pdf = TRUE;
+  // #else
+  //   accepts_pdf = FALSE;
+  // #endif
 
   result = g_object_new (GTK_TYPE_PRINTER_CPDB,
                          "name", name,

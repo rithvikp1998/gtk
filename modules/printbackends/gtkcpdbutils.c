@@ -1,22 +1,5 @@
-/* GTK - The GIMP Toolkit
- * gtkcpdbutils.h: Statemachine implementation of POST and GET 
- * cpdb calls which can be used to create a non-blocking cpdb API
- * Copyright (C) 2006, 2007 Red Hat, Inc.
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library. If not, see <http://www.gnu.org/licenses/>.
- */
 
+/* add license */
 #include "gtkcpdbutils.h"
 #include "config.h"
 #include <gtk/gtk.h>
@@ -121,7 +104,7 @@ gtk_cpdb_request_new_with_username (http_t *connection,
   if (server)
     request->server = g_strdup (server);
   else
-    request->server = g_strdup (cpdbServer ());
+    request->server = g_strdup (cupsServer());  // setting cups as the default for now
 
   if (resource)
     request->resource = g_strdup (resource);
@@ -135,13 +118,14 @@ gtk_cpdb_request_new_with_username (http_t *connection,
     }
   else
     {
+      // requesting with default targets
       request->http = httpConnect2 (request->server, ippPort (),
                                     NULL, AF_UNSPEC,
-                                    cpdbEncryption (),
+                                    HTTP_ENCRYPTION_IF_REQUESTED,
                                     1, 30000, NULL);
 
       if (request->http)
-        httpBlocking (request->http, 0);
+        httpBlocking (request->http, 0);   
 
       request->own_http = TRUE;
     }
@@ -154,8 +138,8 @@ gtk_cpdb_request_new_with_username (http_t *connection,
   request->ipp_request = ippNew ();
   ippSetOperation (request->ipp_request, operation_id);
   ippSetRequestId (request->ipp_request, 1);
-
-  language = cpdbLangDefault ();
+  
+  language = cupsLangDefault ();
 
   gtk_cpdb_request_ipp_add_string (request, IPP_TAG_OPERATION, IPP_TAG_CHARSET,
                                    "attributes-charset",
@@ -172,7 +156,7 @@ gtk_cpdb_request_new_with_username (http_t *connection,
   else
     gtk_cpdb_request_ipp_add_string (request, IPP_TAG_OPERATION, IPP_TAG_NAME,
                                      "requesting-user-name",
-                                     NULL, cpdbUser ());
+                                     NULL, cupsUser());   // need to figure out the user another way
 
   request->auth_info_required = NULL;
   request->auth_info = NULL;
@@ -651,7 +635,7 @@ _connect (GtkCpdbRequest *request)
     {
       request->http = httpConnect2 (request->server, ippPort (),
                                     NULL, AF_UNSPEC,
-                                    cpdbEncryption (),
+                                    cupsEncryption (),
                                     1, 30000, NULL);
       if (request->http == NULL)
         request->attempts++;
@@ -739,7 +723,7 @@ _post_write_request (GtkCpdbRequest *request)
 
   if (ipp_status == IPP_ERROR)
     {
-      int cpdb_error = cpdbLastError ();
+      int cpdb_error = cupsLastError ();
       request->state = GTK_CPDB_POST_DONE;
       request->poll_state = GTK_CPDB_HTTP_IDLE;
 
@@ -912,7 +896,7 @@ passwordCB (const char *prompt)
   char *pwd = cpdb_password;
   cpdb_password = NULL;
 
-  cpdbSetUser (cpdb_username);
+  cupsSetUser(cpdb_username);
 
   return pwd;
 }
@@ -951,7 +935,7 @@ _post_check (GtkCpdbRequest *request)
       /* Negotiate */
       if (strncmp (httpGetField (request->http, HTTP_FIELD_WWW_AUTHENTICATE), "Negotiate", 9) == 0)
         {
-          auth_result = cpdbDoAuthentication (request->http, "POST", request->resource);
+          auth_result = cupsDoAuthentication (request->http, "POST", request->resource);
         }
       /* Basic, BasicDigest, Digest and PeerCred */
       else
@@ -959,10 +943,10 @@ _post_check (GtkCpdbRequest *request)
           if (request->password_state == GTK_CPDB_PASSWORD_NONE)
             {
               cpdb_username = request->username;
-              cpdbSetPasswordCB (passwordCB);
+              cupsSetPasswordCB (passwordCB);
 
               /* This call success for PeerCred authentication */
-              auth_result = cpdbDoAuthentication (request->http, "POST", request->resource);
+              auth_result = cupsDoAuthentication (request->http, "POST", request->resource);
 
               if (auth_result != 0)
                 {
@@ -981,7 +965,7 @@ _post_check (GtkCpdbRequest *request)
               cpdb_password = request->password;
               cpdb_username = request->username;
 
-              auth_result = cpdbDoAuthentication (request->http, "POST", request->resource);
+              auth_result = cupsDoAuthentication (request->http, "POST", request->resource);
 
               if (cpdb_password != NULL)
                 return;
@@ -1053,7 +1037,7 @@ _post_check (GtkCpdbRequest *request)
       /* Flush any error message... */
       httpFlush (request->http);
 
-      cpdbSetEncryption (HTTP_ENCRYPT_REQUIRED);
+      cupsSetEncryption (HTTP_ENCRYPT_REQUIRED);
       request->state = GTK_CPDB_POST_CONNECT;
 
       /* Reconnect... */
@@ -1131,7 +1115,7 @@ _post_read_response (GtkCpdbRequest *request)
 
   if (ipp_status == IPP_ERROR)
     {
-      int ipp_error = cpdbLastError ();
+      int ipp_error = cupsLastError ();
       gtk_cpdb_result_set_error (request->result,
                                  GTK_CPDB_ERROR_IPP,
                                  ipp_status,
@@ -1244,7 +1228,7 @@ _get_check (GtkCpdbRequest *request)
       /* Negotiate */
       if (strncmp (httpGetField (request->http, HTTP_FIELD_WWW_AUTHENTICATE), "Negotiate", 9) == 0)
         {
-          auth_result = cpdbDoAuthentication (request->http, "GET", request->resource);
+          auth_result = cupsDoAuthentication (request->http, "GET", request->resource);
         }
       /* Basic, BasicDigest, Digest and PeerCred */
       else
@@ -1252,10 +1236,10 @@ _get_check (GtkCpdbRequest *request)
           if (request->password_state == GTK_CPDB_PASSWORD_NONE)
             {
               cpdb_username = request->username;
-              cpdbSetPasswordCB (passwordCB);
+              cupsSetPasswordCB (passwordCB);
 
               /* This call success for PeerCred authentication */
-              auth_result = cpdbDoAuthentication (request->http, "GET", request->resource);
+              auth_result = cupsDoAuthentication (request->http, "GET", request->resource);
 
               if (auth_result != 0)
                 {
@@ -1274,7 +1258,7 @@ _get_check (GtkCpdbRequest *request)
               cpdb_password = request->password;
               cpdb_username = request->username;
 
-              auth_result = cpdbDoAuthentication (request->http, "GET", request->resource);
+              auth_result = cupsDoAuthentication (request->http, "GET", request->resource);
 
               if (cpdb_password != NULL)
                 return;
@@ -1319,7 +1303,7 @@ _get_check (GtkCpdbRequest *request)
       /* Flush any error message... */
       httpFlush (request->http);
 
-      cpdbSetEncryption (HTTP_ENCRYPT_REQUIRED);
+      cupsSetEncryption (HTTP_ENCRYPT_REQUIRED);
       request->state = GTK_CPDB_GET_CONNECT;
 
       /* Reconnect... */
@@ -1494,7 +1478,7 @@ gtk_cpdb_connection_test_new (const char *server,
   if (server != NULL)
     result->addrlist = httpAddrGetList (server, AF_UNSPEC, port_str);
   else
-    result->addrlist = httpAddrGetList (cpdbServer (), AF_UNSPEC, port_str);
+    result->addrlist = httpAddrGetList (cupsServer (), AF_UNSPEC, port_str);
 
   g_free (port_str);
 

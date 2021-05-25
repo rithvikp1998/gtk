@@ -697,7 +697,7 @@ cpdb_request_execute (GtkPrintBackendCpdb *print_backend,
 
   GTK_NOTE (PRINTING,
             g_print (" CPDB: %s <source %p> - Executing cpdb request on server '%s' and resource '%s'\n", G_STRFUNC, dispatch, request->server, request->resource));
-
+                          
   dispatch->request = request;
   dispatch->backend = g_object_ref (print_backend);
   dispatch->poll_state = GTK_CPDB_HTTP_IDLE;
@@ -1082,7 +1082,7 @@ gtk_print_backend_cpdb_print_stream (GtkPrintBackend *print_backend,
   cpdb_printer = GTK_PRINTER_CPDB (gtk_print_job_get_printer (job));
 
   settings = gtk_print_job_get_settings (job);
-
+  
   if (cpdb_printer->avahi_browsed)
     {
       http = httpConnect2 (cpdb_printer->hostname, cpdb_printer->port,
@@ -1137,14 +1137,14 @@ gtk_print_backend_cpdb_print_stream (GtkPrintBackend *print_backend,
                                                     NULL,
                                                     cpdb_printer->device_uri,
                                                     GTK_PRINT_BACKEND_CPDB (print_backend)->username);
-
+      
       httpAssembleURIf (HTTP_URI_CODING_ALL,
                         printer_absolute_uri,
                         sizeof (printer_absolute_uri),
                         "ipp",
                         NULL,
                         "localhost",
-                        ippPort (),
+                        ippPort(),
                         "/printers/%s",
                         gtk_printer_get_name (gtk_print_job_get_printer (job)));
     }
